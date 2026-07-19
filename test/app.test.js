@@ -6,6 +6,7 @@ test("serves the browser workflow through HTTP routes", async t => {
   const homebox = {
     status: async () => ({ health: true, build: { version: "v-test" } }),
     locations: async () => [{ id: "box-id", name: "Test Box", path: "Storage → Test Box" }],
+    boxContents: async id => ({ box: { id, name: "Test Box", assetId: "BOX-001" }, items: [{ id: "item-1", name: "Test Drill", quantity: 2 }] }),
     createBook: async book => ({ id: "book-id", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 }),
     createInventoryItem: async item => ({ id: "item-id", name: item.title, parent: { id: item.parentId, name: "Test Box" }, quantity: item.quantity })
   };
@@ -34,6 +35,9 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(health.homebox.version, "v-test");
   const locations = await (await fetch(`${base}/api/locations`)).json();
   assert.equal(locations[0].path, "Storage → Test Box");
+  const box = await (await fetch(`${base}/api/boxes/box-id`)).json();
+  assert.equal(box.box.name, "Test Box");
+  assert.equal(box.items[0].quantity, 2);
   const matches = await (await fetch(`${base}/api/books/9780306406157`)).json();
   assert.equal(matches[0].title, "Test Book");
   const mediaMatches = await (await fetch(`${base}/api/lookup/012345678905`)).json();

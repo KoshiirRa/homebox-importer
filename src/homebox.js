@@ -45,6 +45,32 @@ export class HomeboxClient {
     return this.request(`/v1/entities?${params}`);
   }
 
+  entity(id) {
+    return this.request(`/v1/entities/${encodeURIComponent(id)}`);
+  }
+
+  async boxContents(id) {
+    const box = await this.entity(id);
+    return {
+      box: {
+        id: box.id,
+        assetId: box.assetId || "",
+        name: box.name,
+        description: box.description || "",
+        itemCount: Number(box.itemCount ?? box.children?.length ?? 0)
+      },
+      items: (box.children ?? []).filter(item => !item.archived).map(item => ({
+        id: item.id,
+        assetId: item.assetId || "",
+        name: item.name,
+        quantity: Number(item.quantity ?? 1),
+        itemCount: Number(item.itemCount ?? 0),
+        isLocation: Boolean(item.entityType?.isLocation),
+        entityType: item.entityType?.name || ""
+      }))
+    };
+  }
+
   async locations() {
     const tree = await this.request("/v1/entities/tree?withItems=false");
     const flatten = (nodes, ancestors = []) => nodes.flatMap(node => {

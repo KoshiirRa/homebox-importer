@@ -59,7 +59,7 @@ For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configur
 
 ## Box labels
 
-Open `/labels.html` to select HomeBox boxes or locations and generate printable QR labels. Presets are included for the Brother QL-810WC with DK-2205 62 mm continuous media (50 mm cut length), Avery 5160 (30 per sheet), Avery 5163 (10 per sheet), and 4 × 2 inch thermal labels. Each QR code opens the importer with that destination preselected, so you can scan a box once and then scan items into it. Set the QR destination base URL to an address the phone can reach from the storage unit before printing.
+Open `/labels.html` to select HomeBox boxes or locations and generate printable QR labels. Presets are included for the Brother QL-810WC with DK-2205 62 mm continuous media (50 mm cut length), Avery 5160 (30 per sheet), Avery 5163 (10 per sheet), and 4 × 2 inch thermal labels. Each QR code opens the importer with that destination preselected and displays its current direct contents, so you can identify what is inside before scanning additional items into it. Set the QR destination base URL to an address the phone can reach from the storage unit before printing.
 
 For the Brother preset, install the QL-810WC Windows driver, load a DK-2205 roll, choose the 62 mm continuous media size, disable browser headers and footers, and print at 100% scale. The printer's automatic cutter separates the 50 mm labels.
 

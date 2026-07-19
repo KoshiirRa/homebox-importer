@@ -67,3 +67,21 @@ test("flattens the HomeBox location tree for destination selection", async () =>
     { id: "box", assetId: "BOX-014", name: "Box 14", path: "Storage Unit → Box 14" }
   ]);
 });
+
+test("returns active direct contents for a scanned box", async () => {
+  const fakeFetch = async url => {
+    assert.match(url, /\/api\/v1\/entities\/box-id$/);
+    return Response.json({
+      id: "box-id", assetId: "BOX-014", name: "Box 14", itemCount: 3,
+      children: [
+        { id: "drill", assetId: "ITEM-1", name: "Power Drill", quantity: 2, archived: false, entityType: { name: "Item", isLocation: false } },
+        { id: "old", name: "Archived Cable", quantity: 1, archived: true, entityType: { name: "Item", isLocation: false } }
+      ]
+    });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  const contents = await client.boxContents("box-id");
+  assert.equal(contents.box.name, "Box 14");
+  assert.equal(contents.items.length, 1);
+  assert.equal(contents.items[0].quantity, 2);
+});

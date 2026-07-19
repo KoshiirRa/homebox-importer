@@ -5,7 +5,7 @@ const elements = {
   barcode: document.querySelector("#isbn"), lookup: document.querySelector("#lookup"),
   scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
   video: document.querySelector("#scanner-video"), results: document.querySelector("#results"),
-  message: document.querySelector("#message")
+  message: document.querySelector("#message"), boxView: document.querySelector("#box-view")
 };
 let scannerControls;
 let matches = [];
@@ -66,6 +66,57 @@ function renderMatches() {
     card.append(image, details);
     elements.results.append(card);
   });
+}
+
+async function renderBoxContents(id) {
+  elements.boxView.hidden = false;
+  elements.boxView.replaceChildren();
+  const loading = document.createElement("p");
+  loading.textContent = "Loading box contents…";
+  elements.boxView.append(loading);
+  try {
+    const { box, items } = await jsonRequest(`/api/boxes/${encodeURIComponent(id)}`);
+    elements.boxView.replaceChildren();
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = "Scanned container";
+    const heading = document.createElement("h2");
+    heading.textContent = box.name;
+    const summary = document.createElement("p");
+    summary.textContent = [box.assetId, `${items.length} direct item${items.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+    elements.boxView.append(eyebrow, heading, summary);
+    if (items.length) {
+      const list = document.createElement("ul");
+      list.className = "box-contents";
+      for (const item of items.sort((a, b) => a.name.localeCompare(b.name))) {
+        const row = document.createElement("li");
+        const name = document.createElement("strong");
+        name.textContent = item.name;
+        const details = document.createElement("span");
+        details.textContent = [item.quantity > 1 ? `Qty ${item.quantity}` : "", item.entityType, item.assetId].filter(Boolean).join(" · ");
+        row.append(name, details);
+        list.append(row);
+      }
+      elements.boxView.append(list);
+    } else {
+      const empty = document.createElement("p");
+      empty.textContent = "This box is currently empty.";
+      elements.boxView.append(empty);
+    }
+    const useButton = document.createElement("button");
+    useButton.type = "button";
+    useButton.textContent = "Add items to this box";
+    useButton.addEventListener("click", () => {
+      elements.barcode.focus();
+      message(`${box.name} is selected. Scan an item barcode.`);
+    });
+    elements.boxView.append(useButton);
+  } catch (error) {
+    elements.boxView.replaceChildren();
+    const failure = document.createElement("p");
+    failure.textContent = `Unable to load box contents: ${error.message}`;
+    elements.boxView.append(failure);
+  }
 }
 
 function addTextField(container, labelText, value, onInput, required = false) {
@@ -222,6 +273,7 @@ Promise.all([jsonRequest("/api/health"), jsonRequest("/api/locations")])
     if (destinationId && [...elements.location.options].some(option => option.value === destinationId)) {
       elements.location.value = destinationId;
       message(`Destination selected: ${elements.location.selectedOptions[0].textContent}`, "success");
+      renderBoxContents(destinationId);
     }
   }).catch(error => {
     elements.status.textContent = "HomeBox connection needs attention";

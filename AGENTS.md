@@ -15,7 +15,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Supported workflows: ISBN books plus UPC/EAN music, movies, video games, and ordinary products
 - Book metadata providers: Google Books, Open Library, optional Hardcover, then optional ISBNdb fallback
 - General media providers: optional Discogs, MusicBrainz, then UPCitemdb
-- Box labels: printable QR labels deep-linking to a preselected HomeBox destination, including QL-810WC/DK-2205 continuous-roll support
+- Box labels: printable QR labels deep-linking to a preselected HomeBox destination and current contents view, including QL-810WC/DK-2205 continuous-roll support
 - Barcode scanning: ZXing in the browser
 
 ## Architecture Rules
