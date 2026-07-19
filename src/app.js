@@ -1,9 +1,10 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { lookupBook } from "./books.js";
+import { isValidGtin, lookupMedia, normalizeBarcode } from "./media.js";
 import { HomeboxClient } from "./homebox.js";
 
-export function createApp({ homebox, bookLookup = lookupBook } = {}) {
+export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = lookupMedia } = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
@@ -23,6 +24,14 @@ export function createApp({ homebox, bookLookup = lookupBook } = {}) {
     try { response.json(await bookLookup(request.params.isbn)); } catch (error) { next(error); }
   });
 
+  app.get("/api/lookup/:barcode", async (request, response, next) => {
+    try {
+      const barcode = normalizeBarcode(request.params.barcode);
+      const isIsbn = /^(978|979)/.test(barcode) && isValidGtin(barcode);
+      response.json(isIsbn ? await bookLookup(barcode) : await mediaLookup(barcode));
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/import/books", async (request, response, next) => {
     try {
       const { book, parentId } = request.body ?? {};
@@ -30,6 +39,15 @@ export function createApp({ homebox, bookLookup = lookupBook } = {}) {
       if (!parentId) return response.status(400).json({ error: "Select a destination box or location" });
       const entity = await homebox.createBook({ ...book, parentId });
       response.status(201).json(entity);
+    } catch (error) { next(error); }
+  });
+
+  app.post("/api/import/items", async (request, response, next) => {
+    try {
+      const { item, parentId } = request.body ?? {};
+      if (!item?.title || !item?.barcode) return response.status(400).json({ error: "Item title and barcode are required" });
+      if (!parentId) return response.status(400).json({ error: "Select a destination box or location" });
+      response.status(201).json(await homebox.createInventoryItem({ ...item, parentId }));
     } catch (error) { next(error); }
   });
 
@@ -53,5 +71,9 @@ export function createConfiguredApp(env = process.env) {
     hardcoverApiToken: env.HARDCOVER_API_TOKEN,
     isbnDbApiKey: env.ISBNDB_API_KEY
   });
-  return createApp({ homebox, bookLookup });
+  const mediaLookup = barcode => lookupMedia(barcode, fetch, {
+    discogsToken: env.DISCOGS_TOKEN,
+    upcItemDbApiKey: env.UPCITEMDB_API_KEY
+  });
+  return createApp({ homebox, bookLookup, mediaLookup });
 }

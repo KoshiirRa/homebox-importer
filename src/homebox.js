@@ -65,22 +65,39 @@ export class HomeboxClient {
   }
 
   async createBook({ title, authors = [], description = "", isbn, publisher = "", publishedDate = "", parentId, coverUrl = "" }) {
+    return this.createInventoryItem({
+      title,
+      creators: authors,
+      description,
+      barcode: isbn,
+      manufacturer: publisher,
+      modelNumber: isbn,
+      releaseDate: publishedDate,
+      parentId,
+      imageUrl: coverUrl,
+      mediaType: "Book",
+      identifierName: "ISBN"
+    });
+  }
+
+  async createInventoryItem({ title, creators = [], description = "", barcode, manufacturer = "", modelNumber = "", releaseDate = "", parentId, imageUrl = "", mediaType = "Item", quantity = 1, identifierName = "Barcode" }) {
     const entityTypeId = await this.defaultItemTypeId();
+    const resolvedQuantity = Math.max(1, Number.parseInt(quantity, 10) || 1);
     const created = await this.request("/v1/entities", {
       method: "POST",
       body: JSON.stringify({
         name: title,
         description: description.slice(0, 1000),
         parentId: parentId || null,
-        quantity: 1,
+        quantity: resolvedQuantity,
         ...(entityTypeId ? { entityTypeId } : {})
       })
     });
 
     const notes = [
-      authors.length ? `Authors: ${authors.join(", ")}` : "",
-      publishedDate ? `Published: ${publishedDate}` : "",
-      coverUrl ? `Cover: ${coverUrl}` : "",
+      creators.length ? `Creators: ${creators.join(", ")}` : "",
+      releaseDate ? `Released: ${releaseDate}` : "",
+      imageUrl ? `Image: ${imageUrl}` : "",
       "Imported by HomeBox Importer"
     ].filter(Boolean).join("\n");
 
@@ -89,17 +106,17 @@ export class HomeboxClient {
       name: title,
       description: description.slice(0, 1000),
       parentId: parentId || null,
-      quantity: 1,
+      quantity: resolvedQuantity,
       assetId: created.assetId || "",
-      manufacturer: publisher,
-      modelNumber: isbn,
+      manufacturer,
+      modelNumber: modelNumber || barcode,
       notes,
-      serialNumber: isbn,
+      serialNumber: barcode,
       tagIds: created.tags?.map(tag => tag.id) ?? [],
       fields: [
-        { name: "ISBN", type: "text", textValue: isbn },
-        { name: "Authors", type: "text", textValue: authors.join(", ") },
-        { name: "Media Type", type: "text", textValue: "Book" }
+        { name: identifierName, type: "text", textValue: barcode },
+        { name: "Creators", type: "text", textValue: creators.join(", ") },
+        { name: "Media Type", type: "text", textValue: mediaType }
       ]
     };
     const resolvedTypeId = entityTypeId || created.entityType?.id;

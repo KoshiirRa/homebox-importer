@@ -1,6 +1,6 @@
 # HomeBox Importer
 
-A small mobile-first companion for importing barcode-backed media into HomeBox. The first vertical slice supports ISBN-10/ISBN-13 scanning, Google Books metadata lookup with Open Library, optional Hardcover, and optional ISBNdb fallbacks, editable manual entry when every configured provider has no match, destination selection, and creation of a book inside a HomeBox box/location.
+A small mobile-first companion for importing barcode-backed media into HomeBox. It scans ISBN, UPC, EAN, and GTIN barcodes; looks up books, CDs and other music releases, movies, video games, and general products; supports editable manual entry; and creates quantity-aware items inside a selected HomeBox box or location.
 
 Container image: `ghcr.io/koshiirra/homebox-importer`
 
@@ -12,6 +12,8 @@ Container image: `ghcr.io/koshiirra/homebox-importer`
 | `HOMEBOX_API_KEY` | yes for authenticated actions | none | Dedicated HomeBox API key |
 | `HARDCOVER_API_TOKEN` | no | none | Optional Hardcover token for additional metadata coverage |
 | `ISBNDB_API_KEY` | no | none | Optional ISBNdb key for broader small-press and commercial metadata coverage |
+| `DISCOGS_TOKEN` | no | none | Optional personal Discogs API token for physical music releases |
+| `UPCITEMDB_API_KEY` | no | none | Optional paid UPCitemdb key; without it the 100-request/day trial endpoint is used |
 | `PORT` | no | `8080` | Importer listening port |
 
 Do not use a personal login token. In HomeBox, create a dedicated API key for the importer and inject it as a Docker secret or protected environment value.
@@ -41,6 +43,8 @@ Add this service to the same Compose project as HomeBox:
       HOMEBOX_API_KEY: ${HOMEBOX_IMPORTER_API_KEY}
       HARDCOVER_API_TOKEN: ${HARDCOVER_API_TOKEN:-}
       ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
+      DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
+      UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
     depends_on:
       - homebox
     ports:
@@ -50,6 +54,8 @@ Add this service to the same Compose project as HomeBox:
 The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secret manager and must not be committed.
 
 `HARDCOVER_API_TOKEN` and `ISBNDB_API_KEY` are optional. Lookup order is Google Books, Open Library, Hardcover (when configured), ISBNdb (when configured), and finally editable manual entry. You may paste the Hardcover token with or without its `Bearer ` prefix; the importer sends it only from the server. Hardcover API tokens expire annually, and provider availability and quotas remain subject to their respective services.
+
+For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
 
 A standalone example is available in [`compose.example.yml`](compose.example.yml), with configuration names documented in [`.env.example`](.env.example).
 

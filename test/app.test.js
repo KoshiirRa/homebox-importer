@@ -6,10 +6,12 @@ test("serves the browser workflow through HTTP routes", async t => {
   const homebox = {
     status: async () => ({ health: true, build: { version: "v-test" } }),
     locations: async () => [{ id: "box-id", name: "Test Box", path: "Storage → Test Box" }],
-    createBook: async book => ({ id: "book-id", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 })
+    createBook: async book => ({ id: "book-id", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 }),
+    createInventoryItem: async item => ({ id: "item-id", name: item.title, parent: { id: item.parentId, name: "Test Box" }, quantity: item.quantity })
   };
   const bookLookup = async isbn => [{ isbn, title: "Test Book", authors: ["Test Author"] }];
-  const server = createApp({ homebox, bookLookup }).listen(0, "127.0.0.1");
+  const mediaLookup = async barcode => [{ barcode, title: "Test Game", mediaType: "Video Game", quantity: 2 }];
+  const server = createApp({ homebox, bookLookup, mediaLookup }).listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => {
     server.once("listening", resolve);
     server.once("error", reject);
@@ -28,6 +30,8 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(locations[0].path, "Storage → Test Box");
   const matches = await (await fetch(`${base}/api/books/9780306406157`)).json();
   assert.equal(matches[0].title, "Test Book");
+  const mediaMatches = await (await fetch(`${base}/api/lookup/012345678905`)).json();
+  assert.equal(mediaMatches[0].mediaType, "Video Game");
 
   const response = await fetch(`${base}/api/import/books`, {
     method: "POST",
@@ -37,4 +41,12 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(response.status, 201);
   const created = await response.json();
   assert.equal(created.parent.id, "box-id");
+
+  const itemResponse = await fetch(`${base}/api/import/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parentId: "box-id", item: mediaMatches[0] })
+  });
+  assert.equal(itemResponse.status, 201);
+  assert.equal((await itemResponse.json()).quantity, 2);
 });

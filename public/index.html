@@ -20,9 +20,9 @@
       <label for="location">Destination box or location</label>
       <select id="location"><option value="">Loading locations…</option></select>
 
-      <label for="isbn">Book ISBN</label>
+      <label for="isbn">UPC, EAN, or ISBN barcode</label>
       <div class="input-row">
-        <input id="isbn" inputmode="numeric" autocomplete="off" placeholder="978…">
+        <input id="isbn" inputmode="numeric" autocomplete="off" placeholder="Scan or enter barcode">
         <button id="lookup" type="button">Look up</button>
       </div>
       <div class="scanner-actions">
@@ -33,7 +33,7 @@
       <p id="message" role="status" aria-live="polite"></p>
     </section>
 
-    <section id="results" aria-label="Book matches"></section>
+    <section id="results" aria-label="Inventory matches"></section>
   </main>
   <script src="/app.js" defer></script>
 </body>

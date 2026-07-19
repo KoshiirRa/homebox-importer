@@ -12,8 +12,9 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Runtime: Node.js 24
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
-- First supported media workflow: ISBN-10/ISBN-13 books
+- Supported workflows: ISBN books plus UPC/EAN music, movies, video games, and ordinary products
 - Book metadata providers: Google Books, Open Library, optional Hardcover, then optional ISBNdb fallback
+- General media providers: optional Discogs, MusicBrainz, then UPCitemdb
 - Barcode scanning: ZXing in the browser
 
 ## Architecture Rules

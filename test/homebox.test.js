@@ -38,6 +38,23 @@ test("supports a clean HomeBox instance without a non-location entity type", asy
   assert.equal("entityTypeId" in JSON.parse(calls[2].options.body), false);
 });
 
+test("creates a quantity-aware general media item", async () => {
+  const calls = [];
+  const fakeFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/v1/entity-types")) return Response.json([{ id: "item-type", name: "Item", isLocation: false }]);
+    if (url.endsWith("/api/v1/entities") && options.method === "POST") return Response.json({ id: "game-id", name: "Test Game", tags: [] }, { status: 201 });
+    if (url.endsWith("/api/v1/entities/game-id") && options.method === "PUT") return Response.json({ id: "game-id", name: "Test Game", quantity: 3 });
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  await client.createInventoryItem({ title: "Test Game", barcode: "012345678905", mediaType: "Video Game", manufacturer: "Test Studio", quantity: 3, parentId: "box-id" });
+  const update = JSON.parse(calls[2].options.body);
+  assert.equal(update.quantity, 3);
+  assert.equal(update.manufacturer, "Test Studio");
+  assert.equal(update.fields.find(field => field.name === "Media Type").textValue, "Video Game");
+});
+
 test("flattens the HomeBox location tree for destination selection", async () => {
   const fakeFetch = async url => {
     assert.match(url, /\/api\/v1\/entities\/tree\?withItems=false$/);
