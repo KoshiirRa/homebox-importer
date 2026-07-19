@@ -45,6 +45,8 @@ Add this service to the same Compose project as HomeBox:
 
 The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secret manager and must not be committed.
 
+A standalone example is available in [`compose.example.yml`](compose.example.yml), with configuration names documented in [`.env.example`](.env.example).
+
 Then deploy it:
 
 ```sh
