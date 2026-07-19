@@ -18,7 +18,7 @@ export function isValidIsbn(value) {
   return false;
 }
 
-export async function lookupBook(isbnValue, fetchImpl = fetch, { isbnDbApiKey = "" } = {}) {
+export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
 
@@ -68,6 +68,52 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { isbnDbApiKey = 
       coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
     }));
     if (fallbackMatches.length) return fallbackMatches;
+  }
+
+  if (hardcoverApiToken) {
+    const hardcoverResponse = await fetchImpl("https://api.hardcover.app/v1/graphql", {
+      method: "POST",
+      headers: {
+        authorization: /^Bearer\s/i.test(hardcoverApiToken) ? hardcoverApiToken : `Bearer ${hardcoverApiToken}`,
+        "content-type": "application/json",
+        "user-agent": "HomeBox-Importer/0.1 (+https://github.com/KoshiirRa/homebox-importer)"
+      },
+      body: JSON.stringify({
+        query: `query BookByIsbn($isbn: String!) {
+          editions(where: {_or: [{isbn_10: {_eq: $isbn}}, {isbn_13: {_eq: $isbn}}]}, limit: 5) {
+            id title subtitle release_date isbn_10 isbn_13
+            image { url }
+            publisher { name }
+            book {
+              title subtitle description release_date
+              contributions { author { name } }
+            }
+          }
+        }`,
+        variables: { isbn }
+      })
+    });
+    if (hardcoverResponse.ok) {
+      const hardcoverData = await hardcoverResponse.json();
+      if (hardcoverData.errors?.length) {
+        throw new Error(`Hardcover lookup failed: ${hardcoverData.errors[0].message}`);
+      }
+      const hardcoverMatches = (hardcoverData.data?.editions ?? []).map(edition => ({
+        provider: "Hardcover",
+        providerId: String(edition.id),
+        isbn,
+        title: edition.title || edition.book?.title || "Untitled book",
+        subtitle: edition.subtitle || edition.book?.subtitle || "",
+        authors: (edition.book?.contributions ?? []).map(contribution => contribution.author?.name).filter(Boolean),
+        publisher: edition.publisher?.name ?? "",
+        publishedDate: edition.release_date || edition.book?.release_date || "",
+        description: edition.book?.description ?? "",
+        coverUrl: edition.image?.url ?? ""
+      }));
+      if (hardcoverMatches.length) return hardcoverMatches;
+    } else {
+      throw new Error(`Hardcover lookup failed (${hardcoverResponse.status})`);
+    }
   }
 
   if (isbnDbApiKey) {

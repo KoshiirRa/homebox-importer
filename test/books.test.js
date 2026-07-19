@@ -43,6 +43,44 @@ test("falls back to ISBNdb when the free providers have no match", async () => {
   assert.equal(isbnDbRequest.options.headers.Authorization, "test-isbndb-key");
 });
 
+test("falls back to Hardcover and keeps its token in the server request", async () => {
+  const requests = [];
+  const fakeFetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).includes("googleapis.com")) return Response.json({ totalItems: 0 });
+    if (String(url).includes("openlibrary.org")) return Response.json({ numFound: 0, docs: [] });
+    return Response.json({ data: { editions: [{
+      id: 42,
+      title: "The Legend of Heroes: Trails of Destiny",
+      subtitle: "A Test Subtitle",
+      release_date: "2026-06-01",
+      isbn_13: "9798986753447",
+      image: { url: "https://example.test/hardcover.jpg" },
+      publisher: { name: "Promethium Books" },
+      book: { description: "Explore Zemuria.", contributions: [{ author: { name: "Ashram Kain" } }] }
+    }] } });
+  };
+  const result = await lookupBook("9798986753447", fakeFetch, { hardcoverApiToken: "test-hardcover-token" });
+  assert.equal(result[0].provider, "Hardcover");
+  assert.equal(result[0].authors[0], "Ashram Kain");
+  const hardcoverRequest = requests.find(request => request.url.includes("api.hardcover.app"));
+  assert.equal(hardcoverRequest.options.headers.authorization, "Bearer test-hardcover-token");
+  assert.equal(JSON.parse(hardcoverRequest.options.body).variables.isbn, "9798986753447");
+});
+
+test("preserves a Hardcover token that already includes the Bearer prefix", async () => {
+  const fakeFetch = async (url, options = {}) => {
+    if (String(url).includes("googleapis.com")) return Response.json({ totalItems: 0 });
+    if (String(url).includes("openlibrary.org")) return Response.json({ docs: [] });
+    assert.equal(options.headers.authorization, "Bearer complete-token");
+    return Response.json({ data: { editions: [] } });
+  };
+  await assert.rejects(
+    () => lookupBook("9798986753447", fakeFetch, { hardcoverApiToken: "Bearer complete-token" }),
+    /No book metadata found/
+  );
+});
+
 test("does not call ISBNdb when no key is configured", async () => {
   const urls = [];
   const fakeFetch = async url => {

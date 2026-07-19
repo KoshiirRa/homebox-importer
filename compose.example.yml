@@ -5,6 +5,7 @@ services:
     environment:
       HOMEBOX_URL: ${HOMEBOX_URL:-http://homebox:7745}
       HOMEBOX_API_KEY: ${HOMEBOX_IMPORTER_API_KEY:?Set HOMEBOX_IMPORTER_API_KEY}
+      HARDCOVER_API_TOKEN: ${HARDCOVER_API_TOKEN:-}
       ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
       PORT: 8080
     ports:

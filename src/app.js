@@ -49,6 +49,9 @@ export function createConfiguredApp(env = process.env) {
     baseUrl: env.HOMEBOX_URL ?? "http://homebox:7745",
     apiKey: env.HOMEBOX_API_KEY
   });
-  const bookLookup = isbn => lookupBook(isbn, fetch, { isbnDbApiKey: env.ISBNDB_API_KEY });
+  const bookLookup = isbn => lookupBook(isbn, fetch, {
+    hardcoverApiToken: env.HARDCOVER_API_TOKEN,
+    isbnDbApiKey: env.ISBNDB_API_KEY
+  });
   return createApp({ homebox, bookLookup });
 }

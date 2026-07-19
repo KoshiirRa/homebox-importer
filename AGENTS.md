@@ -13,7 +13,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
 - First supported media workflow: ISBN-10/ISBN-13 books
-- Book metadata providers: Google Books, Open Library, then optional ISBNdb fallback
+- Book metadata providers: Google Books, Open Library, optional Hardcover, then optional ISBNdb fallback
 - Barcode scanning: ZXing in the browser
 
 ## Architecture Rules
