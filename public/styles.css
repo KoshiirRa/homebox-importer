@@ -28,4 +28,6 @@ video { width: 100%; max-height: 380px; margin-top: 1rem; border-radius: 12px; b
 .book-card h3 { margin: 0 0 .4rem; }
 .book-card p { color: #b9c9bf; margin: .35rem 0; }
 .book-card button { margin-top: .75rem; }
+.manual-card label { margin-top: .75rem; font-size: .88rem; }
+.manual-card input { margin-top: .35rem; }
 @media (max-width: 520px) { .book-card { grid-template-columns: 70px 1fr; } .book-card img, .cover-placeholder { width: 70px; min-height: 100px; } }

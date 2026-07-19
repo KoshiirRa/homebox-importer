@@ -1,6 +1,6 @@
 # HomeBox Importer
 
-A small mobile-first companion for importing barcode-backed media into HomeBox. The first vertical slice supports ISBN-10/ISBN-13 scanning, Google Books metadata lookup, destination selection, and creation of a book inside a HomeBox box/location.
+A small mobile-first companion for importing barcode-backed media into HomeBox. The first vertical slice supports ISBN-10/ISBN-13 scanning, Google Books metadata lookup with Open Library fallback, editable manual entry when public providers have no match, destination selection, and creation of a book inside a HomeBox box/location.
 
 Container image: `ghcr.io/koshiirra/homebox-importer`
 

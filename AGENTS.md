@@ -36,6 +36,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Do not commit `.env`, generated frontend bundles, credentials, private hostnames, or private IP addresses.
 - Validate external barcodes before sending provider requests.
 - Upstream provider failures should degrade to another provider or return a clear user-facing error.
+- Valid barcodes absent from every metadata provider must fall back to an editable manual record; provider coverage gaps must not block inventory entry.
 - Preserve accessible labels, keyboard operation, and useful status announcements in the mobile UI.
 
 ## Required Verification

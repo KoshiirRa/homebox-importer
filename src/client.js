@@ -54,13 +54,85 @@ function renderMatches() {
   });
 }
 
+function renderManualDraft(isbn) {
+  const book = {
+    provider: "Manual entry",
+    providerId: isbn,
+    isbn: String(isbn).replace(/[^0-9X]/gi, "").toUpperCase(),
+    title: "",
+    subtitle: "",
+    authors: [],
+    publisher: "",
+    publishedDate: "",
+    description: "",
+    coverUrl: ""
+  };
+  matches = [book];
+  elements.results.replaceChildren();
+
+  const card = document.createElement("article");
+  card.className = "book-card manual-card";
+  const placeholder = document.createElement("div");
+  placeholder.className = "cover-placeholder";
+  placeholder.textContent = "Manual entry";
+  const fields = document.createElement("div");
+  const heading = document.createElement("h3");
+  heading.textContent = "Add book details";
+  fields.append(heading);
+
+  const addField = (labelText, value, onInput, required = false) => {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.value = value;
+    input.required = required;
+    input.addEventListener("input", () => onInput(input.value));
+    label.append(input);
+    fields.append(label);
+    return input;
+  };
+
+  const titleInput = addField("Title", "", value => { book.title = value.trim(); }, true);
+  addField("Author(s), separated by commas", "", value => {
+    book.authors = value.split(",").map(author => author.trim()).filter(Boolean);
+  });
+  addField("Publisher", "", value => { book.publisher = value.trim(); });
+  addField("Published date or year", "", value => { book.publishedDate = value.trim(); });
+  const isbnInput = addField("ISBN", book.isbn, value => {
+    book.isbn = value.replace(/[^0-9X]/gi, "").toUpperCase();
+  }, true);
+  isbnInput.inputMode = "numeric";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Add manual book to selected box";
+  button.addEventListener("click", () => {
+    if (!book.title) {
+      titleInput.focus();
+      return message("Enter the book title before adding it.", "error");
+    }
+    importBook(0);
+  });
+  fields.append(button);
+  card.append(placeholder, fields);
+  elements.results.append(card);
+  titleInput.focus();
+}
+
 async function lookup() {
   message("Looking up barcode…");
   try {
     matches = await jsonRequest(`/api/books/${encodeURIComponent(elements.isbn.value)}`);
     renderMatches();
     message(`${matches.length} metadata match${matches.length === 1 ? "" : "es"} found.`, "success");
-  } catch (error) { message(error.message, "error"); }
+  } catch (error) {
+    if (error.message.startsWith("No book metadata found for ISBN")) {
+      renderManualDraft(elements.isbn.value);
+      message("No public metadata match yet. Enter the missing details below.", "info");
+      return;
+    }
+    message(error.message, "error");
+  }
 }
 
 async function importBook(index) {
