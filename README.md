@@ -1,6 +1,6 @@
 # HomeBox Importer
 
-A small mobile-first companion for importing barcode-backed media into HomeBox. The first vertical slice supports ISBN-10/ISBN-13 scanning, Google Books metadata lookup with Open Library fallback, editable manual entry when public providers have no match, destination selection, and creation of a book inside a HomeBox box/location.
+A small mobile-first companion for importing barcode-backed media into HomeBox. The first vertical slice supports ISBN-10/ISBN-13 scanning, Google Books metadata lookup with Open Library and optional ISBNdb fallbacks, editable manual entry when every configured provider has no match, destination selection, and creation of a book inside a HomeBox box/location.
 
 Container image: `ghcr.io/koshiirra/homebox-importer`
 
@@ -10,6 +10,7 @@ Container image: `ghcr.io/koshiirra/homebox-importer`
 | --- | --- | --- | --- |
 | `HOMEBOX_URL` | yes | `http://homebox:7745` | Base URL visible from the importer container |
 | `HOMEBOX_API_KEY` | yes for authenticated actions | none | Dedicated HomeBox API key |
+| `ISBNDB_API_KEY` | no | none | Optional ISBNdb key for broader small-press and commercial metadata coverage |
 | `PORT` | no | `8080` | Importer listening port |
 
 Do not use a personal login token. In HomeBox, create a dedicated API key for the importer and inject it as a Docker secret or protected environment value.
@@ -37,6 +38,7 @@ Add this service to the same Compose project as HomeBox:
     environment:
       HOMEBOX_URL: http://homebox:7745
       HOMEBOX_API_KEY: ${HOMEBOX_IMPORTER_API_KEY}
+      ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
     depends_on:
       - homebox
     ports:
@@ -44,6 +46,8 @@ Add this service to the same Compose project as HomeBox:
 ```
 
 The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secret manager and must not be committed.
+
+`ISBNDB_API_KEY` is optional. When configured, lookup order is Google Books, Open Library, ISBNdb, and finally editable manual entry. ISBNdb availability and quotas depend on your ISBNdb subscription.
 
 A standalone example is available in [`compose.example.yml`](compose.example.yml), with configuration names documented in [`.env.example`](.env.example).
 

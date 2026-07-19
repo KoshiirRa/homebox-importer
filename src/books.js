@@ -18,7 +18,7 @@ export function isValidIsbn(value) {
   return false;
 }
 
-export async function lookupBook(isbnValue, fetchImpl = fetch) {
+export async function lookupBook(isbnValue, fetchImpl = fetch, { isbnDbApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
 
@@ -53,20 +53,50 @@ export async function lookupBook(isbnValue, fetchImpl = fetch) {
   const fallbackResponse = await fetchImpl(openLibraryUrl, {
     headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
   });
-  if (!fallbackResponse.ok) throw new Error(`Book metadata providers unavailable (Open Library ${fallbackResponse.status})`);
-  const fallbackData = await fallbackResponse.json();
-  const fallbackMatches = (fallbackData.docs ?? []).map(book => ({
-    provider: "Open Library",
-    providerId: book.key ?? isbn,
-    isbn,
-    title: book.title ?? "Untitled book",
-    subtitle: "",
-    authors: book.author_name ?? [],
-    publisher: book.publisher?.[0] ?? "",
-    publishedDate: book.first_publish_year ? String(book.first_publish_year) : "",
-    description: "",
-    coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
-  }));
-  if (!fallbackMatches.length) throw new Error(`No book metadata found for ISBN ${isbn}`);
-  return fallbackMatches;
+  if (fallbackResponse.ok) {
+    const fallbackData = await fallbackResponse.json();
+    const fallbackMatches = (fallbackData.docs ?? []).map(book => ({
+      provider: "Open Library",
+      providerId: book.key ?? isbn,
+      isbn,
+      title: book.title ?? "Untitled book",
+      subtitle: "",
+      authors: book.author_name ?? [],
+      publisher: book.publisher?.[0] ?? "",
+      publishedDate: book.first_publish_year ? String(book.first_publish_year) : "",
+      description: "",
+      coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
+    }));
+    if (fallbackMatches.length) return fallbackMatches;
+  }
+
+  if (isbnDbApiKey) {
+    const isbnDbResponse = await fetchImpl(`https://api2.isbndb.com/book/${encodeURIComponent(isbn)}`, {
+      headers: {
+        Authorization: isbnDbApiKey,
+        "User-Agent": "HomeBox-Importer/0.1 (+https://github.com/KoshiirRa/homebox-importer)"
+      }
+    });
+    if (isbnDbResponse.ok) {
+      const { book } = await isbnDbResponse.json();
+      if (book?.title) {
+        return [{
+          provider: "ISBNdb",
+          providerId: book.isbn13 || book.isbn || isbn,
+          isbn,
+          title: book.title,
+          subtitle: "",
+          authors: book.authors ?? [],
+          publisher: book.publisher ?? "",
+          publishedDate: book.date_published ?? "",
+          description: book.synopsys || book.overview || book.excerpt || "",
+          coverUrl: book.image ?? ""
+        }];
+      }
+    } else if (![404, 422].includes(isbnDbResponse.status)) {
+      throw new Error(`ISBNdb lookup failed (${isbnDbResponse.status})`);
+    }
+  }
+
+  throw new Error(`No book metadata found for ISBN ${isbn}`);
 }
