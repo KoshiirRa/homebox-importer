@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17221d">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Box Labels · HomeBox Importer</title>
+</head>
+<body class="labels-page">
+  <main>
+    <header class="screen-only">
+      <p class="eyebrow">Storage inventory</p>
+      <h1>Label the boxes.</h1>
+      <p><a href="/">Back to barcode importer</a></p>
+    </header>
+    <section class="panel label-controls screen-only">
+      <label for="label-search">Find boxes or locations</label>
+      <input id="label-search" type="search" autocomplete="off" placeholder="Search by name or path">
+      <label for="label-base-url">QR destination base URL</label>
+      <input id="label-base-url" type="url" autocomplete="url" placeholder="https://inventory.example.com">
+      <p class="field-help">Use the address your phone can reach from the storage unit. The box ID is added automatically.</p>
+      <div class="label-toolbar">
+        <button id="select-all" class="secondary" type="button">Select visible</button>
+        <label for="label-preset">Label stock
+          <select id="label-preset">
+            <option value="5160">Avery 5160 · 30 per sheet</option>
+            <option value="5163">Avery 5163 · 10 per sheet</option>
+            <option value="4x2">4 × 2 inch thermal</option>
+          </select>
+        </label>
+      </div>
+      <div id="label-locations" class="location-choices"></div>
+      <div class="label-toolbar">
+        <button id="generate-labels" type="button">Generate labels</button>
+        <button id="print-labels" class="secondary" type="button" hidden>Print</button>
+      </div>
+      <p id="label-message" role="status" aria-live="polite">Loading boxes…</p>
+    </section>
+    <section id="label-preview" class="label-grid preset-5160" aria-label="Printable box labels"></section>
+  </main>
+  <script src="/labels.js" defer></script>
+</body>
+</html>

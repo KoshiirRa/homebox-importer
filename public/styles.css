@@ -30,4 +30,36 @@ video { width: 100%; max-height: 380px; margin-top: 1rem; border-radius: 12px; b
 .book-card button { margin-top: .75rem; }
 .manual-card label { margin-top: .75rem; font-size: .88rem; }
 .manual-card input { margin-top: .35rem; }
+a { color: #b8e2ca; }
+.label-toolbar { display: flex; align-items: end; gap: .75rem; margin-top: 1rem; }
+.label-toolbar label { flex: 1; margin: 0; }
+.location-choices { display: grid; gap: .4rem; max-height: 22rem; overflow: auto; margin-top: 1rem; padding: .25rem; }
+.location-choice { display: flex; align-items: center; gap: .7rem; margin: 0; padding: .55rem; border-radius: 8px; background: #16221c; }
+.location-choice input { width: 1.2rem; min-height: 1.2rem; margin: 0; accent-color: #dfb75a; }
+.label-grid { display: grid; gap: .15in; margin-top: 1rem; }
+.field-help { color: #9fb0a6; font-size: .85rem; margin-top: -.2rem; }
+.inventory-label { display: grid; grid-template-columns: auto 1fr; align-items: center; overflow: hidden; background: #fff; color: #111; border: 1px dashed #777; padding: .1in; }
+.inventory-label img { width: .8in; height: .8in; }
+.inventory-label div { min-width: 0; padding-left: .08in; display: flex; flex-direction: column; gap: .02in; }
+.inventory-label strong, .inventory-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-label strong { font-size: 11pt; }
+.inventory-label span { font-size: 7pt; }
+.inventory-label code { font-size: 8pt; font-weight: 700; }
+.inventory-label small { font-size: 6pt; }
+.preset-5160 { grid-template-columns: repeat(3, 2.625in); column-gap: .0625in; row-gap: 0; }
+.preset-5160 .inventory-label { width: 2.625in; height: 1in; }
+.preset-5163 { grid-template-columns: repeat(2, 4in); gap: 0; }
+.preset-5163 .inventory-label, .preset-4x2 .inventory-label { width: 4in; height: 2in; }
+.preset-5163 .inventory-label img, .preset-4x2 .inventory-label img { width: 1.5in; height: 1.5in; }
+.preset-5163 .inventory-label strong, .preset-4x2 .inventory-label strong { font-size: 16pt; }
+.preset-4x2 { grid-template-columns: 4in; gap: 0; }
 @media (max-width: 520px) { .book-card { grid-template-columns: 70px 1fr; } .book-card img, .cover-placeholder { width: 70px; min-height: 100px; } }
+@media print {
+  @page { size: letter; margin: .5in .25in; }
+  :root { color-scheme: light; }
+  body { background: #fff; }
+  .labels-page main { width: auto; margin: 0; padding: 0; }
+  .screen-only { display: none !important; }
+  .label-grid { margin: 0; }
+  .inventory-label { break-inside: avoid; border-color: transparent; }
+}

@@ -218,6 +218,11 @@ Promise.all([jsonRequest("/api/health"), jsonRequest("/api/locations")])
   .then(([health, locations]) => {
     elements.status.textContent = `Connected to HomeBox ${health.homebox.version ?? ""}`;
     renderLocations(locations);
+    const destinationId = new URLSearchParams(window.location.search).get("destination");
+    if (destinationId && [...elements.location.options].some(option => option.value === destinationId)) {
+      elements.location.value = destinationId;
+      message(`Destination selected: ${elements.location.selectedOptions[0].textContent}`, "success");
+    }
   }).catch(error => {
     elements.status.textContent = "HomeBox connection needs attention";
     message(error.message, "error");

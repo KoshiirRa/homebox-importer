@@ -58,12 +58,12 @@ test("creates a quantity-aware general media item", async () => {
 test("flattens the HomeBox location tree for destination selection", async () => {
   const fakeFetch = async url => {
     assert.match(url, /\/api\/v1\/entities\/tree\?withItems=false$/);
-    return Response.json([{ id: "unit", name: "Storage Unit", children: [{ id: "box", name: "Box 14", children: [] }] }]);
+    return Response.json([{ id: "unit", assetId: "LOC-001", name: "Storage Unit", children: [{ id: "box", assetId: "BOX-014", name: "Box 14", children: [] }] }]);
   };
   const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
   const locations = await client.locations();
   assert.deepEqual(locations, [
-    { id: "unit", name: "Storage Unit", path: "Storage Unit" },
-    { id: "box", name: "Box 14", path: "Storage Unit → Box 14" }
+    { id: "unit", assetId: "LOC-001", name: "Storage Unit", path: "Storage Unit" },
+    { id: "box", assetId: "BOX-014", name: "Box 14", path: "Storage Unit → Box 14" }
   ]);
 });

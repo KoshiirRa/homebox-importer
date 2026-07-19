@@ -1,8 +1,8 @@
 import { build } from "esbuild";
 
 await build({
-  entryPoints: ["src/client.js"],
+  entryPoints: { app: "src/client.js", labels: "src/labels-client.js" },
   bundle: true,
   minify: true,
-  outfile: "public/app.js"
+  outdir: "public"
 });

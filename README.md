@@ -57,6 +57,10 @@ The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secre
 
 For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
 
+## Box labels
+
+Open `/labels.html` to select HomeBox boxes or locations and generate printable QR labels. Presets are included for Avery 5160 (30 per sheet), Avery 5163 (10 per sheet), and 4 × 2 inch thermal labels. Each QR code opens the importer with that destination preselected, so you can scan a box once and then scan items into it. Set the QR destination base URL to an address the phone can reach from the storage unit before printing.
+
 A standalone example is available in [`compose.example.yml`](compose.example.yml), with configuration names documented in [`.env.example`](.env.example).
 
 Then deploy it:

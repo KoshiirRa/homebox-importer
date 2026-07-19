@@ -50,7 +50,7 @@ export class HomeboxClient {
     const flatten = (nodes, ancestors = []) => nodes.flatMap(node => {
       const path = [...ancestors, node.name];
       return [
-        { id: node.id, name: node.name, path: path.join(" → ") },
+        { id: node.id, assetId: node.assetId || "", name: node.name, path: path.join(" → ") },
         ...flatten(node.children ?? [], path)
       ];
     });
