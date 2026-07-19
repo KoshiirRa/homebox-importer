@@ -1,0 +1,8 @@
+{
+  "name": "HomeBox Importer",
+  "short_name": "Box Importer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101713",
+  "theme_color": "#17221d"
+}

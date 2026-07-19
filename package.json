@@ -1,0 +1,18 @@
+{
+  "name": "homebox-importer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./node_modules/esbuild/bin/esbuild src/client.js --bundle --minify --outfile=public/app.js",
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@zxing/browser": "^0.1.5",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

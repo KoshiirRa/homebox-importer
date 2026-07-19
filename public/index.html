@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17221d">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <title>HomeBox Importer</title>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Storage inventory</p>
+      <h1>Scan it into the right box.</h1>
+      <p id="status">Connecting to HomeBox…</p>
+    </header>
+
+    <section class="panel">
+      <label for="location">Destination box or location</label>
+      <select id="location"><option value="">Loading locations…</option></select>
+
+      <label for="isbn">Book ISBN</label>
+      <div class="input-row">
+        <input id="isbn" inputmode="numeric" autocomplete="off" placeholder="978…">
+        <button id="lookup" type="button">Look up</button>
+      </div>
+      <div class="scanner-actions">
+        <button id="scan" class="secondary" type="button">Use camera</button>
+        <button id="stop" class="secondary" type="button" hidden>Stop camera</button>
+      </div>
+      <video id="scanner-video" muted playsinline hidden></video>
+      <p id="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="results" aria-label="Book matches"></section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
