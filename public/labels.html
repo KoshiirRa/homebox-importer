@@ -24,12 +24,14 @@
         <button id="select-all" class="secondary" type="button">Select visible</button>
         <label for="label-preset">Label stock
           <select id="label-preset">
+            <option value="dk2205">Brother QL-810WC · DK-2205 continuous roll</option>
             <option value="5160">Avery 5160 · 30 per sheet</option>
             <option value="5163">Avery 5163 · 10 per sheet</option>
             <option value="4x2">4 × 2 inch thermal</option>
           </select>
         </label>
       </div>
+      <p id="preset-help" class="field-help">Print on 62 mm continuous media at 100% scale. Each label is automatically cut to 50 mm.</p>
       <div id="label-locations" class="location-choices"></div>
       <div class="label-toolbar">
         <button id="generate-labels" type="button">Generate labels</button>
@@ -37,7 +39,7 @@
       </div>
       <p id="label-message" role="status" aria-live="polite">Loading boxes…</p>
     </section>
-    <section id="label-preview" class="label-grid preset-5160" aria-label="Printable box labels"></section>
+    <section id="label-preview" class="label-grid preset-dk2205" aria-label="Printable box labels"></section>
   </main>
   <script src="/labels.js" defer></script>
 </body>

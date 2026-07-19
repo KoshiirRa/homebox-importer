@@ -4,6 +4,7 @@ const elements = {
   locations: document.querySelector("#label-locations"), search: document.querySelector("#label-search"),
   baseUrl: document.querySelector("#label-base-url"),
   preset: document.querySelector("#label-preset"), selectAll: document.querySelector("#select-all"),
+  presetHelp: document.querySelector("#preset-help"),
   generate: document.querySelector("#generate-labels"), print: document.querySelector("#print-labels"),
   message: document.querySelector("#label-message"), preview: document.querySelector("#label-preview")
 };
@@ -83,6 +84,15 @@ async function generateLabels() {
 }
 
 elements.search.addEventListener("input", () => renderLocations(elements.search.value));
+const presetHelp = {
+  dk2205: "Print on 62 mm continuous media at 100% scale. Each label is automatically cut to 50 mm.",
+  "5160": "Use Avery 5160 letter-size stock and print at 100% scale.",
+  "5163": "Use Avery 5163 letter-size stock and print at 100% scale.",
+  "4x2": "Use 4 × 2 inch stock and print at 100% scale."
+};
+elements.preset.addEventListener("change", () => {
+  elements.presetHelp.textContent = presetHelp[elements.preset.value];
+});
 elements.baseUrl.value = localStorage.getItem("labelBaseUrl") || window.location.origin;
 elements.baseUrl.addEventListener("change", () => localStorage.setItem("labelBaseUrl", elements.baseUrl.value));
 elements.selectAll.addEventListener("click", () => {

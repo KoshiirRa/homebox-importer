@@ -47,6 +47,12 @@ a { color: #b8e2ca; }
 .inventory-label code { font-size: 8pt; font-weight: 700; }
 .inventory-label small { font-size: 6pt; }
 .preset-5160 { grid-template-columns: repeat(3, 2.625in); column-gap: .0625in; row-gap: 0; }
+.preset-dk2205 { grid-template-columns: 62mm; gap: 2mm; }
+.preset-dk2205 .inventory-label { width: 62mm; height: 50mm; padding: 2mm; }
+.preset-dk2205 .inventory-label img { width: 30mm; height: 30mm; }
+.preset-dk2205 .inventory-label strong { font-size: 14pt; white-space: normal; line-height: 1.05; }
+.preset-dk2205 .inventory-label span { font-size: 7pt; }
+.preset-dk2205 .inventory-label code { font-size: 8pt; }
 .preset-5160 .inventory-label { width: 2.625in; height: 1in; }
 .preset-5163 { grid-template-columns: repeat(2, 4in); gap: 0; }
 .preset-5163 .inventory-label, .preset-4x2 .inventory-label { width: 4in; height: 2in; }
@@ -56,10 +62,13 @@ a { color: #b8e2ca; }
 @media (max-width: 520px) { .book-card { grid-template-columns: 70px 1fr; } .book-card img, .cover-placeholder { width: 70px; min-height: 100px; } }
 @media print {
   @page { size: letter; margin: .5in .25in; }
+  @page brother-dk2205 { size: 62mm 50mm; margin: 0; }
   :root { color-scheme: light; }
   body { background: #fff; }
   .labels-page main { width: auto; margin: 0; padding: 0; }
   .screen-only { display: none !important; }
   .label-grid { margin: 0; }
   .inventory-label { break-inside: avoid; border-color: transparent; }
+  .preset-dk2205 { display: block; }
+  .preset-dk2205 .inventory-label { page: brother-dk2205; break-after: page; margin: 0; }
 }

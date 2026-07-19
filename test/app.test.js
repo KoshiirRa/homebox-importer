@@ -25,7 +25,10 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.match(await page.text(), /Scan it into the right box/);
   const labelsPage = await fetch(`${base}/labels.html`);
   assert.equal(labelsPage.status, 200);
-  assert.match(await labelsPage.text(), /Label the boxes/);
+  const labelsHtml = await labelsPage.text();
+  assert.match(labelsHtml, /Label the boxes/);
+  assert.match(labelsHtml, /QL-810WC/);
+  assert.match(labelsHtml, /DK-2205/);
 
   const health = await (await fetch(`${base}/api/health`)).json();
   assert.equal(health.homebox.version, "v-test");
