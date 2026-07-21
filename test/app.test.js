@@ -30,6 +30,7 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.match(labelsHtml, /Label the boxes/);
   assert.match(labelsHtml, /QL-810WC/);
   assert.match(labelsHtml, /DK-2205/);
+  assert.match(labelsHtml, /exact-size PDF/);
 
   const health = await (await fetch(`${base}/api/health`)).json();
   assert.equal(health.homebox.version, "v-test");

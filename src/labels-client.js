@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { jsPDF } from "jspdf";
 
 const elements = {
   locations: document.querySelector("#label-locations"), search: document.querySelector("#label-search"),
@@ -19,6 +20,17 @@ async function jsonRequest(url) {
 }
 
 const selectedIds = () => [...selectedLocationIds];
+const selectedLocations = () => {
+  const ids = new Set(selectedIds());
+  return locations.filter(location => ids.has(location.id));
+};
+
+function destinationUrl(location) {
+  const target = new URL("/", elements.baseUrl.value);
+  if (!/^https?:$/.test(target.protocol)) throw new Error("Unsupported URL protocol");
+  target.searchParams.set("destination", location.id);
+  return target.href;
+}
 
 function renderLocations(filter = "") {
   const needle = filter.trim().toLowerCase();
@@ -42,8 +54,7 @@ function renderLocations(filter = "") {
 }
 
 async function generateLabels() {
-  const ids = new Set(selectedIds());
-  const selected = locations.filter(location => ids.has(location.id));
+  const selected = selectedLocations();
   if (!selected.length) {
     elements.message.textContent = "Select at least one box or location.";
     return;
@@ -54,18 +65,16 @@ async function generateLabels() {
   for (const location of selected) {
     let target;
     try {
-      target = new URL("/", elements.baseUrl.value);
-      if (!/^https?:$/.test(target.protocol)) throw new Error("Unsupported URL protocol");
+      target = destinationUrl(location);
     } catch {
       elements.message.textContent = "Enter a valid QR destination URL.";
       return;
     }
-    target.searchParams.set("destination", location.id);
     const label = document.createElement("article");
     label.className = "inventory-label";
     const qr = document.createElement("img");
     qr.alt = `QR code for ${location.name}`;
-    qr.src = await QRCode.toDataURL(target.href, { margin: 0, width: 300, errorCorrectionLevel: "M" });
+    qr.src = await QRCode.toDataURL(target, { margin: 0, width: 300, errorCorrectionLevel: "M" });
     const text = document.createElement("div");
     const heading = document.createElement("strong");
     heading.textContent = location.name;
@@ -80,12 +89,49 @@ async function generateLabels() {
     elements.preview.append(label);
   }
   elements.print.hidden = false;
+  elements.print.textContent = elements.preset.value === "dk2205" ? "Download print-ready PDF" : "Print";
   elements.message.textContent = `${selected.length} label${selected.length === 1 ? "" : "s"} ready to print.`;
+}
+
+async function downloadBrotherPdf() {
+  const selected = selectedLocations();
+  if (!selected.length) return generateLabels();
+  elements.message.textContent = "Building exact-size 62 × 50 mm PDF…";
+  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [62, 50], compress: true });
+  pdf.setProperties({ title: "HomeBox Box Labels", subject: "Brother QL-810WC / DK-2205 labels" });
+  for (let index = 0; index < selected.length; index += 1) {
+    const location = selected[index];
+    if (index) pdf.addPage([62, 50], "landscape");
+    const qr = await QRCode.toDataURL(destinationUrl(location), { margin: 0, width: 600, errorCorrectionLevel: "M" });
+    pdf.addImage(qr, "PNG", 2.5, 10, 30, 30, undefined, "FAST");
+    const textX = 35;
+    const textWidth = 24;
+    pdf.setTextColor(0);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    const nameLines = pdf.splitTextToSize(location.name, textWidth).slice(0, 3);
+    pdf.text(nameLines, textX, 10);
+    let cursor = 10 + nameLines.length * 5.2 + 1;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(6.5);
+    const safePath = location.path.replace(/[^\x20-\x7E]/g, " > ");
+    const pathLines = pdf.splitTextToSize(safePath, textWidth).slice(0, 3);
+    pdf.text(pathLines, textX, cursor);
+    cursor += pathLines.length * 2.8 + 1.5;
+    pdf.setFont("courier", "bold");
+    pdf.setFontSize(8.5);
+    pdf.text(location.assetId || `ID ${location.id.slice(0, 8)}`, textX, Math.min(cursor, 41));
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(5.5);
+    pdf.text("Scan to view contents", textX, 46);
+  }
+  pdf.save("homebox-box-labels-dk2205.pdf");
+  elements.message.textContent = `${selected.length} exact-size label page${selected.length === 1 ? "" : "s"} downloaded. Print the PDF at Actual size.`;
 }
 
 elements.search.addEventListener("input", () => renderLocations(elements.search.value));
 const presetHelp = {
-  dk2205: "Print on 62 mm continuous media at 100% scale. Each label is automatically cut to 50 mm.",
+  dk2205: "Download the exact-size PDF, then print it at Actual size on 62 mm continuous media. Each label is 50 mm long.",
   "5160": "Use Avery 5160 letter-size stock and print at 100% scale.",
   "5163": "Use Avery 5163 letter-size stock and print at 100% scale.",
   "4x2": "Use 4 × 2 inch stock and print at 100% scale."
@@ -105,7 +151,12 @@ elements.selectAll.addEventListener("click", () => {
   });
 });
 elements.generate.addEventListener("click", generateLabels);
-elements.print.addEventListener("click", () => window.print());
+elements.print.addEventListener("click", () => {
+  if (elements.preset.value === "dk2205") downloadBrotherPdf().catch(error => {
+    elements.message.textContent = `Unable to build label PDF: ${error.message}`;
+  });
+  else window.print();
+});
 
 jsonRequest("/api/locations").then(result => {
   locations = result.sort((a, b) => a.path.localeCompare(b.path));
