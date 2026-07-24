@@ -10,21 +10,54 @@ test("normalizes and validates ISBN values", () => {
 });
 
 test("maps Google Books metadata", async () => {
-  const fakeFetch = async () => new Response(JSON.stringify({ items: [{ id: "abc", volumeInfo: { title: "Test Book", authors: ["A. Writer"], publisher: "Example Press", publishedDate: "2026", imageLinks: { thumbnail: "http://example.test/cover.jpg" } } }] }), { status: 200 });
+  const fakeFetch = async () => new Response(JSON.stringify({ items: [{ id: "abc", volumeInfo: { title: "Pathfinder Adventure Path", subtitle: "The Six-Legend Soul", authors: ["A. Writer"], publisher: "Example Press", publishedDate: "2026", imageLinks: { thumbnail: "http://example.test/cover.jpg" } } }] }), { status: 200 });
   const result = await lookupBook("9780306406157", fakeFetch);
-  assert.equal(result[0].title, "Test Book");
+  assert.equal(result[0].title, "Pathfinder Adventure Path");
+  assert.equal(result[0].subtitle, "The Six-Legend Soul");
   assert.equal(result[0].coverUrl, "https://example.test/cover.jpg");
 });
 
 test("falls back to Open Library when Google Books is rate limited", async () => {
   const fakeFetch = async url => {
     if (String(url).includes("googleapis.com")) return new Response("rate limited", { status: 429 });
+    if (String(url).includes("/isbn/")) return new Response("not found", { status: 404 });
     return Response.json({ docs: [{ key: "/works/OL1W", title: "Fallback Book", author_name: ["Library Author"], publisher: ["Library Press"], first_publish_year: 1999, cover_i: 123 }] });
   };
   const result = await lookupBook("9780306406157", fakeFetch);
   assert.equal(result[0].provider, "Open Library");
   assert.equal(result[0].title, "Fallback Book");
   assert.equal(result[0].coverUrl, "https://covers.openlibrary.org/b/id/123-M.jpg");
+});
+
+test("enriches a generic Open Library work title with exact-edition metadata", async () => {
+  const fakeFetch = async url => {
+    if (String(url).includes("googleapis.com")) return new Response("rate limited", { status: 429 });
+    if (String(url).includes("/isbn/")) {
+      return Response.json({
+        key: "/books/OL27810046M",
+        title: "Pathfinder Adventure Path",
+        subtitle: "The Six-Legend Soul",
+        publishers: ["Paizo Inc."],
+        publish_date: "Aug 28, 2018",
+        covers: [9206282]
+      });
+    }
+    return Response.json({ docs: [{
+      key: "/works/OL20564730W",
+      title: "Pathfinder Adventure Path",
+      author_name: ["Amber E. Scott"],
+      publisher: ["Paizo Inc."],
+      first_publish_year: 2018,
+      cover_i: 9206282,
+      edition_key: ["OL27810046M"]
+    }] });
+  };
+  const result = await lookupBook("9781640780521", fakeFetch);
+  assert.equal(result[0].providerId, "/books/OL27810046M");
+  assert.equal(result[0].title, "Pathfinder Adventure Path");
+  assert.equal(result[0].subtitle, "The Six-Legend Soul");
+  assert.equal(result[0].publishedDate, "Aug 28, 2018");
+  assert.equal(result[0].coverUrl, "https://covers.openlibrary.org/b/id/9206282-M.jpg");
 });
 
 test("falls back to ISBNdb when the free providers have no match", async () => {

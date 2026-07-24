@@ -48,24 +48,31 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
 
   const openLibraryUrl = new URL("https://openlibrary.org/search.json");
   openLibraryUrl.searchParams.set("isbn", isbn);
-  openLibraryUrl.searchParams.set("fields", "key,title,author_name,publisher,first_publish_year,cover_i");
+  openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key");
   openLibraryUrl.searchParams.set("limit", "5");
   const fallbackResponse = await fetchImpl(openLibraryUrl, {
     headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
   });
   if (fallbackResponse.ok) {
     const fallbackData = await fallbackResponse.json();
-    const fallbackMatches = (fallbackData.docs ?? []).map(book => ({
+    let edition = null;
+    const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
+      headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
+    });
+    if (editionResponse.ok) edition = await editionResponse.json();
+    const fallbackMatches = (fallbackData.docs ?? []).map((book, index) => ({
       provider: "Open Library",
-      providerId: book.key ?? isbn,
+      providerId: index === 0 && edition?.key ? edition.key : book.key ?? isbn,
       isbn,
-      title: book.title ?? "Untitled book",
-      subtitle: "",
+      title: index === 0 ? edition?.title || book.title || "Untitled book" : book.title ?? "Untitled book",
+      subtitle: index === 0 ? edition?.subtitle || book.subtitle || "" : book.subtitle ?? "",
       authors: book.author_name ?? [],
-      publisher: book.publisher?.[0] ?? "",
-      publishedDate: book.first_publish_year ? String(book.first_publish_year) : "",
+      publisher: index === 0 ? edition?.publishers?.[0] || book.publisher?.[0] || "" : book.publisher?.[0] ?? "",
+      publishedDate: index === 0 ? edition?.publish_date || (book.first_publish_year ? String(book.first_publish_year) : "") : book.first_publish_year ? String(book.first_publish_year) : "",
       description: "",
-      coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
+      coverUrl: index === 0 && edition?.covers?.[0]
+        ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
+        : book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
     }));
     if (fallbackMatches.length) return fallbackMatches;
   }

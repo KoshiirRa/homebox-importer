@@ -90,9 +90,14 @@ export class HomeboxClient {
     return preferred?.id ?? null;
   }
 
-  async createBook({ title, authors = [], description = "", isbn, publisher = "", publishedDate = "", parentId, coverUrl = "" }) {
+  async createBook({ title, subtitle = "", authors = [], description = "", isbn, publisher = "", publishedDate = "", parentId, coverUrl = "" }) {
+    const normalizedTitle = title.trim();
+    const normalizedSubtitle = subtitle.trim();
+    const inventoryTitle = normalizedSubtitle && !normalizedTitle.toLocaleLowerCase().includes(normalizedSubtitle.toLocaleLowerCase())
+      ? `${normalizedTitle}${/[:\-–—]\s*$/.test(normalizedTitle) ? " " : ": "}${normalizedSubtitle}`
+      : normalizedTitle;
     return this.createInventoryItem({
-      title,
+      title: inventoryTitle,
       creators: authors,
       description,
       barcode: isbn,

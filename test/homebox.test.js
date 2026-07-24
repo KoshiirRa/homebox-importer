@@ -23,6 +23,25 @@ test("sends bearer authentication and creates then enriches a book", async () =>
   assert.equal(updateBody.fields.find(field => field.name === "ISBN").textValue, "9780306406157");
 });
 
+test("includes provider subtitles in the HomeBox inventory name", async () => {
+  const calls = [];
+  const fakeFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/v1/entity-types")) return Response.json([]);
+    if (url.endsWith("/api/v1/entities") && options.method === "POST") return Response.json({ id: "new-id", name: "Pathfinder Adventure Path: The Six-Legend Soul", tags: [] }, { status: 201 });
+    if (url.endsWith("/api/v1/entities/new-id") && options.method === "PUT") return Response.json({ id: "new-id" });
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  await client.createBook({
+    title: "Pathfinder Adventure Path",
+    subtitle: "The Six-Legend Soul",
+    isbn: "9781640780521",
+    parentId: "box-id"
+  });
+  assert.equal(JSON.parse(calls[1].options.body).name, "Pathfinder Adventure Path: The Six-Legend Soul");
+});
+
 test("supports a clean HomeBox instance without a non-location entity type", async () => {
   const calls = [];
   const fakeFetch = async (url, options = {}) => {
