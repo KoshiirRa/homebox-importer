@@ -18,9 +18,23 @@ export function isValidIsbn(value) {
   return false;
 }
 
+function bookDisplayTitle(book) {
+  return [book.title, book.subtitle].filter(Boolean).join(": ");
+}
+
+function metadataScore(book) {
+  const displayTitle = bookDisplayTitle(book);
+  return displayTitle.length
+    + (book.subtitle ? 30 : 0)
+    + Math.min(book.description?.length ?? 0, 300) / 20
+    + (book.authors?.length ? 5 : 0)
+    + (book.coverUrl ? 3 : 0);
+}
+
 export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
+  const matches = [];
 
   const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
   googleUrl.searchParams.set("q", `isbn:${isbn}`);
@@ -28,7 +42,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   const response = await fetchImpl(googleUrl);
   if (response.ok) {
     const data = await response.json();
-    const matches = (data.items ?? []).map(item => {
+    matches.push(...(data.items ?? []).map(item => {
       const info = item.volumeInfo ?? {};
       return {
         provider: "Google Books",
@@ -42,8 +56,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
         description: info.description ?? "",
         coverUrl: info.imageLinks?.thumbnail?.replace(/^http:/, "https:") ?? ""
       };
-    });
-    if (matches.length) return matches;
+    }));
   }
 
   const openLibraryUrl = new URL("https://openlibrary.org/search.json");
@@ -56,10 +69,12 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   if (fallbackResponse.ok) {
     const fallbackData = await fallbackResponse.json();
     let edition = null;
-    const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
-      headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
-    });
-    if (editionResponse.ok) edition = await editionResponse.json();
+    if (fallbackData.docs?.length) {
+      const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
+        headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
+      });
+      if (editionResponse.ok) edition = await editionResponse.json();
+    }
     const fallbackMatches = (fallbackData.docs ?? []).map((book, index) => ({
       provider: "Open Library",
       providerId: index === 0 && edition?.key ? edition.key : book.key ?? isbn,
@@ -74,7 +89,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
         ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
         : book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
     }));
-    if (fallbackMatches.length) return fallbackMatches;
+    matches.push(...fallbackMatches);
   }
 
   if (hardcoverApiToken) {
@@ -117,7 +132,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
         description: edition.book?.description ?? "",
         coverUrl: edition.image?.url ?? ""
       }));
-      if (hardcoverMatches.length) return hardcoverMatches;
+      matches.push(...hardcoverMatches);
     } else {
       throw new Error(`Hardcover lookup failed (${hardcoverResponse.status})`);
     }
@@ -133,7 +148,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
     if (isbnDbResponse.ok) {
       const { book } = await isbnDbResponse.json();
       if (book?.title) {
-        return [{
+        matches.push({
           provider: "ISBNdb",
           providerId: book.isbn13 || book.isbn || isbn,
           isbn,
@@ -144,12 +159,17 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
           publishedDate: book.date_published ?? "",
           description: book.synopsys || book.overview || book.excerpt || "",
           coverUrl: book.image ?? ""
-        }];
+        });
       }
     } else if (![404, 422].includes(isbnDbResponse.status)) {
       throw new Error(`ISBNdb lookup failed (${isbnDbResponse.status})`);
     }
   }
 
-  throw new Error(`No book metadata found for ISBN ${isbn}`);
+  if (!matches.length) throw new Error(`No book metadata found for ISBN ${isbn}`);
+  const uniqueMatches = [...new Map(matches.map(book => [
+    bookDisplayTitle(book).trim().toLocaleLowerCase(),
+    book
+  ])).values()];
+  return uniqueMatches.sort((left, right) => metadataScore(right) - metadataScore(left));
 }

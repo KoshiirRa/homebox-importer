@@ -60,6 +60,52 @@ test("enriches a generic Open Library work title with exact-edition metadata", a
   assert.equal(result[0].coverUrl, "https://covers.openlibrary.org/b/id/9206282-M.jpg");
 });
 
+test("ranks a detailed Hardcover volume above generic Google and Open Library matches", async () => {
+  const fakeFetch = async url => {
+    if (String(url).includes("googleapis.com")) {
+      return Response.json({ items: [{ id: "google-generic", volumeInfo: {
+        title: "Ruins of Azlant",
+        authors: ["Amber E. Scott"],
+        publisher: "Paizo Inc.",
+        publishedDate: "2017"
+      } }] });
+    }
+    if (String(url).includes("openlibrary.org/search")) {
+      return Response.json({ docs: [{
+        key: "/works/OL21301715W",
+        title: "Ruins of Azlant",
+        author_name: ["Amber E. Scott"],
+        publisher: ["Paizo Inc."],
+        first_publish_year: 2017
+      }] });
+    }
+    if (String(url).includes("openlibrary.org/isbn")) {
+      return Response.json({
+        key: "/books/OL28849703M",
+        title: "Ruins of Azlant",
+        publishers: ["Paizo Inc."],
+        publish_date: "2017"
+      });
+    }
+    return Response.json({ data: { editions: [{
+      id: 124,
+      title: "Pathfinder Adventure Path: Ruins of Azlant 4 of 6",
+      subtitle: "City in the Deep",
+      release_date: "2017-12-05",
+      publisher: { name: "Paizo Inc." },
+      book: {
+        description: "The fourth installment of the Ruins of Azlant Adventure Path.",
+        contributions: [{ author: { name: "Amber E. Scott" } }]
+      }
+    }] } });
+  };
+  const result = await lookupBook("9781601259882", fakeFetch, { hardcoverApiToken: "test-token" });
+  assert.equal(result[0].provider, "Hardcover");
+  assert.equal(result[0].title, "Pathfinder Adventure Path: Ruins of Azlant 4 of 6");
+  assert.equal(result[0].subtitle, "City in the Deep");
+  assert.equal(result.some(book => book.title === "Ruins of Azlant"), true);
+});
+
 test("falls back to ISBNdb when the free providers have no match", async () => {
   const requests = [];
   const fakeFetch = async (url, options = {}) => {
