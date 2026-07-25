@@ -59,37 +59,60 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
     }));
   }
 
-  const openLibraryUrl = new URL("https://openlibrary.org/search.json");
-  openLibraryUrl.searchParams.set("isbn", isbn);
-  openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key");
-  openLibraryUrl.searchParams.set("limit", "5");
-  const fallbackResponse = await fetchImpl(openLibraryUrl, {
+  const openLibraryBooksUrl = new URL("https://openlibrary.org/api/books");
+  openLibraryBooksUrl.searchParams.set("bibkeys", `ISBN:${isbn}`);
+  openLibraryBooksUrl.searchParams.set("jscmd", "data");
+  openLibraryBooksUrl.searchParams.set("format", "json");
+  const exactBookResponse = await fetchImpl(openLibraryBooksUrl, {
     headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
   });
-  if (fallbackResponse.ok) {
-    const fallbackData = await fallbackResponse.json();
-    let edition = null;
-    if (fallbackData.docs?.length) {
-      const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
-        headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
-      });
-      if (editionResponse.ok) edition = await editionResponse.json();
-    }
-    const fallbackMatches = (fallbackData.docs ?? []).map((book, index) => ({
+  const exactBookData = exactBookResponse.ok ? await exactBookResponse.json() : {};
+  const exactBook = exactBookData[`ISBN:${isbn}`];
+  if (exactBook) {
+    matches.push({
       provider: "Open Library",
-      providerId: index === 0 && edition?.key ? edition.key : book.key ?? isbn,
+      providerId: exactBook.key ?? isbn,
       isbn,
-      title: index === 0 ? edition?.title || book.title || "Untitled book" : book.title ?? "Untitled book",
-      subtitle: index === 0 ? edition?.subtitle || book.subtitle || "" : book.subtitle ?? "",
-      authors: book.author_name ?? [],
-      publisher: index === 0 ? edition?.publishers?.[0] || book.publisher?.[0] || "" : book.publisher?.[0] ?? "",
-      publishedDate: index === 0 ? edition?.publish_date || (book.first_publish_year ? String(book.first_publish_year) : "") : book.first_publish_year ? String(book.first_publish_year) : "",
+      title: exactBook.title ?? "Untitled book",
+      subtitle: exactBook.subtitle ?? "",
+      authors: (exactBook.authors ?? []).map(author => author.name).filter(Boolean),
+      publisher: exactBook.publishers?.[0]?.name ?? "",
+      publishedDate: exactBook.publish_date ?? "",
       description: "",
-      coverUrl: index === 0 && edition?.covers?.[0]
-        ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
-        : book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
-    }));
-    matches.push(...fallbackMatches);
+      coverUrl: exactBook.cover?.medium?.replace(/^http:/, "https:") ?? ""
+    });
+  } else {
+    const openLibraryUrl = new URL("https://openlibrary.org/search.json");
+    openLibraryUrl.searchParams.set("isbn", isbn);
+    openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key");
+    openLibraryUrl.searchParams.set("limit", "5");
+    const fallbackResponse = await fetchImpl(openLibraryUrl, {
+      headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
+    });
+    if (fallbackResponse.ok) {
+      const fallbackData = await fallbackResponse.json();
+      let edition = null;
+      if (fallbackData.docs?.length) {
+        const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
+          headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
+        });
+        if (editionResponse.ok) edition = await editionResponse.json();
+      }
+      matches.push(...(fallbackData.docs ?? []).map((book, index) => ({
+        provider: "Open Library",
+        providerId: index === 0 && edition?.key ? edition.key : book.key ?? isbn,
+        isbn,
+        title: index === 0 ? edition?.title || book.title || "Untitled book" : book.title ?? "Untitled book",
+        subtitle: index === 0 ? edition?.subtitle || book.subtitle || "" : book.subtitle ?? "",
+        authors: book.author_name ?? [],
+        publisher: index === 0 ? edition?.publishers?.[0] || book.publisher?.[0] || "" : book.publisher?.[0] ?? "",
+        publishedDate: index === 0 ? edition?.publish_date || (book.first_publish_year ? String(book.first_publish_year) : "") : book.first_publish_year ? String(book.first_publish_year) : "",
+        description: "",
+        coverUrl: index === 0 && edition?.covers?.[0]
+          ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
+          : book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
+      })));
+    }
   }
 
   if (hardcoverApiToken) {

@@ -60,6 +60,34 @@ test("enriches a generic Open Library work title with exact-edition metadata", a
   assert.equal(result[0].coverUrl, "https://covers.openlibrary.org/b/id/9206282-M.jpg");
 });
 
+test("uses the Open Library exact-books API when search coverage is unreliable", async () => {
+  const urls = [];
+  const fakeFetch = async url => {
+    urls.push(String(url));
+    if (String(url).includes("googleapis.com")) return new Response("rate limited", { status: 429 });
+    if (String(url).includes("/api/books")) {
+      return Response.json({
+        "ISBN:9781601253903": {
+          key: "/books/OL25358482M",
+          title: "Pathfinder Roleplaying Game",
+          subtitle: "Advanced Race Guide",
+          authors: [{ name: "James Jacobs" }],
+          publishers: [{ name: "Paizo Inc." }],
+          publish_date: "June 2012",
+          cover: { medium: "https://covers.openlibrary.org/b/id/7143705-M.jpg" }
+        }
+      });
+    }
+    throw new Error(`Unexpected provider request: ${url}`);
+  };
+  const result = await lookupBook("9781601253903", fakeFetch);
+  assert.equal(result[0].provider, "Open Library");
+  assert.equal(result[0].title, "Pathfinder Roleplaying Game");
+  assert.equal(result[0].subtitle, "Advanced Race Guide");
+  assert.equal(result[0].publisher, "Paizo Inc.");
+  assert.equal(urls.some(url => url.includes("search.json")), false);
+});
+
 test("ranks a detailed Hardcover volume above generic Google and Open Library matches", async () => {
   const fakeFetch = async url => {
     if (String(url).includes("googleapis.com")) {
