@@ -3,12 +3,22 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 const elements = {
   status: document.querySelector("#status"), location: document.querySelector("#location"),
   barcode: document.querySelector("#isbn"), lookup: document.querySelector("#lookup"),
-  scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
+  scanContainer: document.querySelector("#scan-container"), scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
   video: document.querySelector("#scanner-video"), results: document.querySelector("#results"),
   message: document.querySelector("#message"), boxView: document.querySelector("#box-view")
 };
 let scannerControls;
 let matches = [];
+
+function destinationFromQr(value) {
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) return "";
+    return url.searchParams.get("destination")?.trim() || "";
+  } catch {
+    return "";
+  }
+}
 
 function message(text, kind = "info") {
   elements.message.textContent = text;
@@ -234,7 +244,24 @@ async function importMatch(index) {
   } catch (error) { message(error.message, "error"); }
 }
 
-async function startScanner() {
+function selectScannedContainer(value) {
+  const destinationId = destinationFromQr(value);
+  const option = [...elements.location.options].find(entry => entry.value === destinationId);
+  if (!destinationId || !option) {
+    message("That QR code does not identify an available HomeBox container.", "error");
+    return false;
+  }
+  elements.location.value = destinationId;
+  const destinationUrl = new URL(window.location.href);
+  destinationUrl.searchParams.set("destination", destinationId);
+  window.history.replaceState({}, "", destinationUrl);
+  message(`Container selected: ${option.textContent}`, "success");
+  renderBoxContents(destinationId);
+  elements.barcode.focus();
+  return true;
+}
+
+async function startScanner(mode = "item") {
   stopScanner();
   elements.video.hidden = false;
   elements.stop.hidden = false;
@@ -242,11 +269,18 @@ async function startScanner() {
   try {
     scannerControls = await reader.decodeFromVideoDevice(undefined, elements.video, result => {
       if (!result) return;
-      elements.barcode.value = result.getText();
+      const value = result.getText();
       stopScanner();
-      lookup();
+      if (mode === "container" || destinationFromQr(value)) {
+        selectScannedContainer(value);
+      } else {
+        elements.barcode.value = value;
+        lookup();
+      }
     });
-    message("Point the camera at a UPC, EAN, or ISBN barcode.");
+    message(mode === "container"
+      ? "Point the camera at a HomeBox Importer container QR label."
+      : "Point the camera at a UPC, EAN, or ISBN barcode.");
   } catch (error) {
     stopScanner();
     message(`Camera unavailable: ${error.message}`, "error");
@@ -261,7 +295,8 @@ function stopScanner() {
 }
 
 elements.lookup.addEventListener("click", lookup);
-elements.scan.addEventListener("click", startScanner);
+elements.scanContainer.addEventListener("click", () => startScanner("container"));
+elements.scan.addEventListener("click", () => startScanner("item"));
 elements.stop.addEventListener("click", stopScanner);
 elements.barcode.addEventListener("keydown", event => { if (event.key === "Enter") lookup(); });
 

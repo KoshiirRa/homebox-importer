@@ -20,6 +20,7 @@
     <section class="panel">
       <label for="location">Destination box or location</label>
       <select id="location"><option value="">Loading locations…</option></select>
+      <button id="scan-container" class="secondary" type="button">Scan container QR</button>
 
       <label for="isbn">UPC, EAN, or ISBN barcode</label>
       <div class="input-row">
@@ -27,7 +28,7 @@
         <button id="lookup" type="button">Look up</button>
       </div>
       <div class="scanner-actions">
-        <button id="scan" class="secondary" type="button">Use camera</button>
+        <button id="scan" class="secondary" type="button">Scan item barcode</button>
         <button id="stop" class="secondary" type="button" hidden>Stop camera</button>
       </div>
       <video id="scanner-video" muted playsinline hidden></video>

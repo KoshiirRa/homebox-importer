@@ -23,7 +23,9 @@ test("serves the browser workflow through HTTP routes", async t => {
 
   const page = await fetch(base);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Scan it into the right box/);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /Scan it into the right box/);
+  assert.match(pageHtml, /Scan container QR/);
   const labelsPage = await fetch(`${base}/labels.html`);
   assert.equal(labelsPage.status, 200);
   const labelsHtml = await labelsPage.text();
