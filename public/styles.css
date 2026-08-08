@@ -47,7 +47,7 @@ a { color: #b8e2ca; }
 .inventory-label img { width: .8in; height: .8in; }
 .inventory-label div { min-width: 0; padding-left: .08in; display: flex; flex-direction: column; gap: .02in; }
 .inventory-label strong, .inventory-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inventory-label strong { font-size: 11pt; }
+.inventory-label strong { display: block; font-size: 11pt; }
 .inventory-label span { font-size: 7pt; }
 .inventory-label code { font-size: 8pt; font-weight: 700; }
 .inventory-label small { font-size: 6pt; }

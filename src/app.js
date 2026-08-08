@@ -20,6 +20,10 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
     try { response.json(await homebox.locations()); } catch (error) { next(error); }
   });
 
+  app.get("/api/label-destinations", async (_request, response, next) => {
+    try { response.json(await homebox.labelDestinations()); } catch (error) { next(error); }
+  });
+
   app.get("/api/boxes/:id", async (request, response, next) => {
     try { response.json(await homebox.boxContents(request.params.id)); } catch (error) { next(error); }
   });

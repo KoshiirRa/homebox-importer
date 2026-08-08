@@ -78,14 +78,30 @@ export class HomeboxClient {
 
   async locations() {
     const tree = await this.request("/v1/entities/tree?withItems=false");
+    return this.flattenTree(tree);
+  }
+
+  flattenTree(tree, locationIds = null) {
     const flatten = (nodes, ancestors = []) => nodes.flatMap(node => {
       const path = [...ancestors, node.name];
       return [
-        { id: node.id, assetId: node.assetId || "", name: node.name, path: path.join(" → ") },
+        {
+          id: node.id, assetId: node.assetId || "", name: node.name, path: path.join(" → "),
+          ...(locationIds ? { isLocation: locationIds.has(node.id) } : {})
+        },
         ...flatten(node.children ?? [], path)
       ];
     });
     return flatten(Array.isArray(tree) ? tree : []);
+  }
+
+  async labelDestinations() {
+    const [locationTree, fullTree] = await Promise.all([
+      this.request("/v1/entities/tree?withItems=false"),
+      this.request("/v1/entities/tree?withItems=true")
+    ]);
+    const locationIds = new Set(this.flattenTree(locationTree).map(location => location.id));
+    return this.flattenTree(fullTree, locationIds);
   }
 
   async defaultItemTypeId() {

@@ -6,6 +6,10 @@ test("serves the browser workflow through HTTP routes", async t => {
   const homebox = {
     status: async () => ({ health: true, build: { version: "v-test" } }),
     locations: async () => [{ id: "box-id", name: "Test Box", path: "Storage → Test Box" }],
+    labelDestinations: async () => [
+      { id: "box-id", name: "Test Box", path: "Storage → Test Box", isLocation: true },
+      { id: "records-id", name: "Uninventoried Records", path: "Storage → Uninventoried Records", isLocation: false }
+    ],
     boxContents: async id => ({ box: { id, name: "Test Box", assetId: "BOX-001" }, items: [{ id: "item-1", name: "Test Drill", quantity: 2 }] }),
     createBook: async book => ({ id: "book-id", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 }),
     createInventoryItem: async item => ({ id: "item-id", name: item.title, parent: { id: item.parentId, name: "Test Box" }, quantity: item.quantity })
@@ -38,6 +42,8 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(health.homebox.version, "v-test");
   const locations = await (await fetch(`${base}/api/locations`)).json();
   assert.equal(locations[0].path, "Storage → Test Box");
+  const labelDestinations = await (await fetch(`${base}/api/label-destinations`)).json();
+  assert.equal(labelDestinations[1].name, "Uninventoried Records");
   const box = await (await fetch(`${base}/api/boxes/box-id`)).json();
   assert.equal(box.box.name, "Test Box");
   assert.equal(box.items[0].quantity, 2);

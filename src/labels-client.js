@@ -32,10 +32,41 @@ function destinationUrl(location) {
   return target.href;
 }
 
+function fitPreviewHeading(heading, preset) {
+  const maximumSize = preset === "5163" || preset === "4x2" ? 16 : preset === "dk2205" ? 14 : 11;
+  const maximumHeight = preset === "5160" ? 18 : preset === "dk2205" ? 68 : 64;
+  heading.style.whiteSpace = preset === "5160" ? "nowrap" : "normal";
+  heading.style.lineHeight = "1.05";
+  heading.style.maxHeight = `${maximumHeight}px`;
+  let size = maximumSize;
+  heading.style.fontSize = `${size}pt`;
+  while (size > 5 && (heading.scrollHeight > maximumHeight || heading.scrollWidth > heading.clientWidth + 1)) {
+    size -= 0.5;
+    heading.style.fontSize = `${size}pt`;
+  }
+}
+
+function fitPdfName(pdf, name, width, maximumHeight = 18) {
+  let fontSize = 14;
+  let lines = [];
+  let lineHeight = 0;
+  while (fontSize >= 3) {
+    pdf.setFontSize(fontSize);
+    lines = pdf.splitTextToSize(name, width);
+    lineHeight = fontSize * 0.37;
+    if (lines.length * lineHeight <= maximumHeight) break;
+    fontSize -= 0.5;
+  }
+  return { fontSize, lines, lineHeight };
+}
+
 function renderLocations(filter = "") {
   const needle = filter.trim().toLowerCase();
   elements.locations.replaceChildren();
-  for (const location of locations.filter(entry => !needle || entry.path.toLowerCase().includes(needle))) {
+  const visible = locations.filter(entry => needle
+    ? entry.path.toLowerCase().includes(needle)
+    : entry.isLocation);
+  for (const location of visible) {
     const label = document.createElement("label");
     label.className = "location-choice";
     const checkbox = document.createElement("input");
@@ -87,6 +118,7 @@ async function generateLabels() {
     text.append(heading, path, asset, instruction);
     label.append(qr, text);
     elements.preview.append(label);
+    fitPreviewHeading(heading, elements.preset.value);
   }
   elements.print.hidden = false;
   elements.print.textContent = elements.preset.value === "dk2205" ? "Download print-ready PDF" : "Print";
@@ -108,10 +140,10 @@ async function downloadBrotherPdf() {
     const textWidth = 24;
     pdf.setTextColor(0);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(14);
-    const nameLines = pdf.splitTextToSize(location.name, textWidth).slice(0, 3);
+    const { fontSize: nameSize, lines: nameLines, lineHeight: nameLineHeight } = fitPdfName(pdf, location.name, textWidth);
+    pdf.setFontSize(nameSize);
     pdf.text(nameLines, textX, 10);
-    let cursor = 10 + nameLines.length * 5.2 + 1;
+    let cursor = 10 + nameLines.length * nameLineHeight + 1;
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(6.5);
     const safePath = location.path.replace(/[^\x20-\x7E]/g, " > ");
@@ -158,8 +190,9 @@ elements.print.addEventListener("click", () => {
   else window.print();
 });
 
-jsonRequest("/api/locations").then(result => {
+jsonRequest("/api/label-destinations").then(result => {
   locations = result.sort((a, b) => a.path.localeCompare(b.path));
   renderLocations();
-  elements.message.textContent = `${locations.length} boxes and locations available.`;
+  const locationCount = locations.filter(location => location.isLocation).length;
+  elements.message.textContent = `${locationCount} locations shown. Search to find any HomeBox container or item.`;
 }).catch(error => { elements.message.textContent = error.message; });

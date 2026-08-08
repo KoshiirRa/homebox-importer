@@ -87,6 +87,27 @@ test("flattens the HomeBox location tree for destination selection", async () =>
   ]);
 });
 
+test("includes non-location entities in the searchable label catalog", async () => {
+  const fakeFetch = async url => {
+    if (url.endsWith("withItems=false")) {
+      return Response.json([{ id: "unit", name: "Storage Unit", children: [] }]);
+    }
+    if (url.endsWith("withItems=true")) {
+      return Response.json([{ id: "unit", name: "Storage Unit", children: [
+        { id: "records", name: "Uncle Bill's Records (Uninventoried) #1", children: [] }
+      ] }]);
+    }
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  const destinations = await client.labelDestinations();
+  assert.equal(destinations[0].isLocation, true);
+  assert.deepEqual(destinations[1], {
+    id: "records", assetId: "", name: "Uncle Bill's Records (Uninventoried) #1",
+    path: "Storage Unit → Uncle Bill's Records (Uninventoried) #1", isLocation: false
+  });
+});
+
 test("queries active direct contents by parent when the entity response omits children", async () => {
   const fakeFetch = async url => {
     if (url.endsWith("/api/v1/entities/box-id")) {
