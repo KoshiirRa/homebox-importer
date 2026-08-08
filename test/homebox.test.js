@@ -87,20 +87,25 @@ test("flattens the HomeBox location tree for destination selection", async () =>
   ]);
 });
 
-test("returns active direct contents for a scanned box", async () => {
+test("queries active direct contents by parent when the entity response omits children", async () => {
   const fakeFetch = async url => {
-    assert.match(url, /\/api\/v1\/entities\/box-id$/);
-    return Response.json({
-      id: "box-id", assetId: "BOX-014", name: "Box 14", itemCount: 3,
-      children: [
+    if (url.endsWith("/api/v1/entities/box-id")) {
+      return Response.json({ id: "box-id", assetId: "BOX-014", name: "Box 14", itemCount: 0 });
+    }
+    if (url.includes("/api/v1/entities?")) {
+      const requestUrl = new URL(url);
+      assert.deepEqual(requestUrl.searchParams.getAll("parentIds"), ["box-id"]);
+      return Response.json({ total: 2, page: 1, pageSize: 500, items: [
         { id: "drill", assetId: "ITEM-1", name: "Power Drill", quantity: 2, archived: false, entityType: { name: "Item", isLocation: false } },
         { id: "old", name: "Archived Cable", quantity: 1, archived: true, entityType: { name: "Item", isLocation: false } }
-      ]
-    });
+      ] });
+    }
+    return new Response("Not found", { status: 404 });
   };
   const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
   const contents = await client.boxContents("box-id");
   assert.equal(contents.box.name, "Box 14");
+  assert.equal(contents.box.itemCount, 2);
   assert.equal(contents.items.length, 1);
   assert.equal(contents.items[0].quantity, 2);
 });

@@ -40,8 +40,9 @@ export class HomeboxClient {
     return this.request("/v1/entity-types");
   }
 
-  async entities({ page = 1, pageSize = 500 } = {}) {
+  async entities({ page = 1, pageSize = 500, parentIds = [] } = {}) {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    for (const parentId of parentIds) params.append("parentIds", parentId);
     return this.request(`/v1/entities?${params}`);
   }
 
@@ -50,16 +51,20 @@ export class HomeboxClient {
   }
 
   async boxContents(id) {
-    const box = await this.entity(id);
+    const [box, result] = await Promise.all([
+      this.entity(id),
+      this.entities({ parentIds: [id] })
+    ]);
+    const children = Array.isArray(result) ? result : result?.items ?? [];
     return {
       box: {
         id: box.id,
         assetId: box.assetId || "",
         name: box.name,
         description: box.description || "",
-        itemCount: Number(box.itemCount ?? box.children?.length ?? 0)
+        itemCount: children.length
       },
-      items: (box.children ?? []).filter(item => !item.archived).map(item => ({
+      items: children.filter(item => !item.archived).map(item => ({
         id: item.id,
         assetId: item.assetId || "",
         name: item.name,
