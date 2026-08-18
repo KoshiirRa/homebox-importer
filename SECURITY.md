@@ -16,3 +16,8 @@ Do not open a public issue containing credentials, private hostnames, inventory 
 ## Supported versions
 
 Until the project reaches a stable release, security fixes are applied only to the latest published container and source on `main`.
+
+Release `v0.3.8` updates the bundled DOMPurify dependency to `3.4.13`, resolving
+the moderate XSS advisory affecting `3.4.12` and earlier. Because browser
+dependencies are bundled during the build, release verification runs both the
+full dependency audit and the production-only audit.

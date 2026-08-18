@@ -4,6 +4,10 @@ A small mobile-first companion for importing barcode-backed media into HomeBox. 
 
 Container image: `ghcr.io/koshiirra/homebox-importer`
 
+The development and GitHub Actions baseline is Node.js 24 LTS. Published
+containers use Node.js 26. See [CHANGELOG.md](CHANGELOG.md) for release history
+and upgrade notes.
+
 ## Configuration
 
 | Variable | Required | Default | Purpose |
@@ -72,13 +76,13 @@ docker compose pull homebox-importer
 docker compose up -d homebox-importer
 ```
 
-For repeatable production deployments, replace `latest` with a published version such as `0.1.0` after validating that release.
+For repeatable production deployments, replace `latest` with a published version such as `0.3.8` after validating that release.
 
 ## Published tags
 
 - `latest`: most recent successful build from `main`
-- `0.1.0` and `0.1`: semantic-version tags created from Git tag `v0.1.0`
-- `v0.1.0`: source Git tag
+- `0.3.8` and `0.3`: semantic-version container tags created from Git tag `v0.3.8`
+- `v0.3.8`: source Git tag and container tag
 - `sha-…`: immutable commit build
 
 ## Test/reset boundary

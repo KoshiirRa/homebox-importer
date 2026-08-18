@@ -9,7 +9,8 @@ HomeBox remains the system of record. This application may enrich and submit dat
 ## Current Production Baseline
 
 - HomeBox API compatibility target: `v0.26.2`
-- Runtime: Node.js 24
+- Development and GitHub Actions runtime: Node.js 24 LTS
+- Published container runtime: Node.js 26
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
 - Supported workflows: ISBN books plus UPC/EAN music, movies, video games, and ordinary products
@@ -49,6 +50,7 @@ Run before committing:
 npm ci
 npm run build
 npm test
+npm audit
 npm audit --omit=dev
 ```
 
@@ -61,6 +63,8 @@ For HomeBox API changes, verify request and response shapes against the live Swa
 - `main` publishes `ghcr.io/koshiirra/homebox-importer:latest` and an immutable `sha-*` tag.
 - Git tags matching `v*` publish semantic-version container tags.
 - Do not create a release tag until the `main` container workflow succeeds.
+- Keep `package.json`, `package-lock.json`, `README.md`, `CHANGELOG.md`, and this production baseline synchronized for every release.
+- Dependency maintenance releases must document browser-bundled security fixes even when `npm audit --omit=dev` is clean.
 - Never place deployment credentials in GitHub Actions configuration; use `GITHUB_TOKEN` for GHCR and repository/environment secrets for anything else.
 
 ## Scope Roadmap

@@ -4,9 +4,13 @@
 
 Requirements:
 
-- Node.js 24
+- Node.js 24 LTS for local development and CI
 - npm
 - Optional Docker with Buildx for container verification
+
+The production Dockerfile currently uses Node.js 26. Changes to either runtime
+must be tested independently and reflected in `README.md`, `AGENTS.md`, and the
+release notes.
 
 Install and verify:
 
@@ -14,6 +18,7 @@ Install and verify:
 npm ci
 npm run build
 npm test
+npm audit
 npm audit --omit=dev
 ```
 
