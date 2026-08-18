@@ -9,11 +9,11 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@zxing/browser": "^0.1.5",
+    "@zxing/browser": "^0.2.1",
     "express": "^5.1.0"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4"
   }
