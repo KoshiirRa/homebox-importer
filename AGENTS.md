@@ -9,7 +9,8 @@ HomeBox remains the system of record. This application may enrich and submit dat
 ## Current Production Baseline
 
 - HomeBox API compatibility target: `v0.26.2`
-- Development and GitHub Actions runtime: Node.js 24 LTS
+- Local development runtime: Node.js 22
+- GitHub Actions runtime: Node.js 24 LTS
 - Published container runtime: Node.js 26
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
@@ -31,6 +32,16 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Never log secrets, API keys, authorization headers, or complete upstream error bodies that may contain credentials.
 
 ## Development Rules
+
+- Target the Ubuntu 26.04 LTS development VM at `10.42.42.54` (`dev-vm`).
+- Use Bash at `/bin/bash` and Linux POSIX paths such as `/home/marty/...`; never use Windows paths in commands, scripts, or documentation intended for the development environment.
+- Use Python 3.14 from `~/.antigravity-env/bin/python3` or `uv` when Python tooling is needed.
+- Use Node.js 22 from `~/.nvm/versions/node/v22.23.2/bin` for local development; preserve the repository's separately pinned CI and container runtimes.
+- Use native Linux tools such as `rsync`, `find`, `grep`, `jq`, `systemctl`, and `docker`.
+- Keep text files on strict POSIX LF (`\n`) line endings.
+- Antigravity (`agy`) is the primary architect for multi-file refactors, subagent delegation, infrastructure changes, and deep codebase research.
+- Codex is the secondary pair-programmer for targeted inline edits, unit tests, and fast code reviews.
+- Before completing development work, run `git status` and use clean, focused commit messages when commits are requested.
 
 - Treat live HomeBox installations as read-only unless a test mutation is explicitly authorized.
 - Live test records must begin with `[TEST]` and include `Safe to Delete` in their names.
