@@ -16,7 +16,11 @@ test("serves the browser workflow through HTTP routes", async t => {
   };
   const bookLookup = async isbn => [{ isbn, title: "Test Book", authors: ["Test Author"] }];
   const mediaLookup = async barcode => [{ barcode, title: "Test Game", mediaType: "Video Game", quantity: 2 }];
-  const server = createApp({ homebox, bookLookup, mediaLookup }).listen(0, "127.0.0.1");
+  const coverLookup = async (_image, barcode) => ({
+    text: "Test Book\nTest Author",
+    matches: [{ isbn: barcode, title: "Test Book", authors: ["Test Author"] }]
+  });
+  const server = createApp({ homebox, bookLookup, mediaLookup, coverLookup }).listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => {
     server.once("listening", resolve);
     server.once("error", reject);
@@ -30,6 +34,7 @@ test("serves the browser workflow through HTTP routes", async t => {
   const pageHtml = await page.text();
   assert.match(pageHtml, /Scan it into the right box/);
   assert.match(pageHtml, /Scan container QR/);
+  assert.match(pageHtml, /Scan the cover/);
   const labelsPage = await fetch(`${base}/labels.html`);
   assert.equal(labelsPage.status, 200);
   const labelsHtml = await labelsPage.text();
@@ -40,6 +45,7 @@ test("serves the browser workflow through HTTP routes", async t => {
 
   const health = await (await fetch(`${base}/api/health`)).json();
   assert.equal(health.homebox.version, "v-test");
+  assert.equal(health.features.coverLookup, true);
   const locations = await (await fetch(`${base}/api/locations`)).json();
   assert.equal(locations[0].path, "Storage → Test Box");
   const labelDestinations = await (await fetch(`${base}/api/label-destinations`)).json();
@@ -51,6 +57,12 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(matches[0].title, "Test Book");
   const mediaMatches = await (await fetch(`${base}/api/lookup/012345678905`)).json();
   assert.equal(mediaMatches[0].mediaType, "Video Game");
+  const coverMatches = await (await fetch(`${base}/api/books/cover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: "data:image/jpeg;base64,aGVsbG8=", barcode: "9789190079249" })
+  })).json();
+  assert.equal(coverMatches.matches[0].isbn, "9789190079249");
 
   const response = await fetch(`${base}/api/import/books`, {
     method: "POST",

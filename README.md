@@ -18,6 +18,7 @@ and upgrade notes.
 | `ISBNDB_API_KEY` | no | none | Optional ISBNdb key for broader small-press and commercial metadata coverage |
 | `DISCOGS_TOKEN` | no | none | Optional personal Discogs API token for physical music releases |
 | `UPCITEMDB_API_KEY` | no | none | Optional paid UPCitemdb key; without it the 100-request/day trial endpoint is used |
+| `GOOGLE_CLOUD_VISION_API_KEY` | no | none | Enables book-cover OCR after barcode metadata providers fail |
 | `PORT` | no | `8080` | Importer listening port |
 
 Do not use a personal login token. In HomeBox, create a dedicated API key for the importer and inject it as a Docker secret or protected environment value.
@@ -49,6 +50,7 @@ Add this service to the same Compose project as HomeBox:
       ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
       DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
       UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
+      GOOGLE_CLOUD_VISION_API_KEY: ${GOOGLE_CLOUD_VISION_API_KEY:-}
     depends_on:
       - homebox
     ports:
@@ -60,6 +62,8 @@ The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secre
 `HARDCOVER_API_TOKEN` and `ISBNDB_API_KEY` are optional. Lookup order is Google Books, Open Library, Hardcover (when configured), ISBNdb (when configured), and finally editable manual entry. You may paste the Hardcover token with or without its `Bearer ` prefix; the importer sends it only from the server. Hardcover API tokens expire annually, and provider availability and quotas remain subject to their respective services.
 
 For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
+
+When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, the server sends it to Google Cloud Vision `TEXT_DETECTION`, and the recognized cover text is searched through Google Books and Open Library. The user must review a candidate before importing it. The Vision key stays on the server, is sent in the `x-goog-api-key` header, and is never included in browser code. Cover photos are processed in memory and are not stored by the importer.
 
 ## Box labels
 

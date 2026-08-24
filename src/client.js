@@ -5,10 +5,12 @@ const elements = {
   barcode: document.querySelector("#isbn"), lookup: document.querySelector("#lookup"),
   scanContainer: document.querySelector("#scan-container"), scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
   video: document.querySelector("#scanner-video"), results: document.querySelector("#results"),
-  message: document.querySelector("#message"), boxView: document.querySelector("#box-view")
+  message: document.querySelector("#message"), boxView: document.querySelector("#box-view"),
+  coverFallback: document.querySelector("#cover-fallback"), coverPhoto: document.querySelector("#cover-photo")
 };
 let scannerControls;
 let matches = [];
+let coverLookupAvailable = false;
 
 function destinationFromQr(value) {
   try {
@@ -206,7 +208,52 @@ function renderManualDraft(barcode, isBook = false) {
   titleInput.focus();
 }
 
+async function coverDataUrl(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", .82));
+  if (!blob) throw new Error("Unable to prepare that cover photo");
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result), { once: true });
+    reader.addEventListener("error", () => reject(new Error("Unable to read that cover photo")), { once: true });
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function lookupCover(file) {
+  if (!file) return;
+  message("Reading the book cover…");
+  elements.coverPhoto.disabled = true;
+  try {
+    const image = await coverDataUrl(file);
+    const result = await jsonRequest("/api/books/cover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, barcode: elements.barcode.value })
+    });
+    if (!result.matches.length) {
+      return message("Cover text was recognized, but no catalog match was found. Enter the details below.");
+    }
+    matches = result.matches;
+    renderMatches();
+    elements.coverFallback.hidden = true;
+    message(`${matches.length} possible cover match${matches.length === 1 ? "" : "es"} found. Review before adding.`, "success");
+  } catch (error) {
+    message(error.message, "error");
+  } finally {
+    elements.coverPhoto.disabled = false;
+    elements.coverPhoto.value = "";
+  }
+}
+
 async function lookup() {
+  elements.coverFallback.hidden = true;
   message("Looking up barcode…");
   try {
     matches = await jsonRequest(`/api/lookup/${encodeURIComponent(elements.barcode.value)}`);
@@ -215,7 +262,10 @@ async function lookup() {
   } catch (error) {
     if (error.message.startsWith("No book metadata found for ISBN")) {
       renderManualDraft(elements.barcode.value, true);
-      return message("No public book match found. Enter the missing details below.");
+      elements.coverFallback.hidden = !coverLookupAvailable;
+      return message(coverLookupAvailable
+        ? "No barcode match found. Scan the cover or enter the missing details below."
+        : "No public book match found. Enter the missing details below.");
     }
     if (error.message.startsWith("No product metadata found for barcode")) {
       renderManualDraft(elements.barcode.value, false);
@@ -298,11 +348,13 @@ elements.lookup.addEventListener("click", lookup);
 elements.scanContainer.addEventListener("click", () => startScanner("container"));
 elements.scan.addEventListener("click", () => startScanner("item"));
 elements.stop.addEventListener("click", stopScanner);
+elements.coverPhoto.addEventListener("change", () => lookupCover(elements.coverPhoto.files[0]));
 elements.barcode.addEventListener("keydown", event => { if (event.key === "Enter") lookup(); });
 
 Promise.all([jsonRequest("/api/health"), jsonRequest("/api/locations")])
   .then(([health, locations]) => {
     elements.status.textContent = `Connected to HomeBox ${health.homebox.version ?? ""}`;
+    coverLookupAvailable = Boolean(health.features?.coverLookup);
     renderLocations(locations);
     const destinationId = new URLSearchParams(window.location.search).get("destination");
     if (destinationId && [...elements.location.options].some(option => option.value === destinationId)) {

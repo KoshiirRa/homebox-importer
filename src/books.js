@@ -31,6 +31,23 @@ function metadataScore(book) {
     + (book.coverUrl ? 3 : 0);
 }
 
+async function fetchProvider(fetchImpl, ...args) {
+  try {
+    return await fetchImpl(...args);
+  } catch {
+    return null;
+  }
+}
+
+async function readJson(response) {
+  if (!response?.ok) return null;
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
@@ -39,9 +56,9 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
   googleUrl.searchParams.set("q", `isbn:${isbn}`);
   googleUrl.searchParams.set("maxResults", "5");
-  const response = await fetchImpl(googleUrl);
-  if (response.ok) {
-    const data = await response.json();
+  const response = await fetchProvider(fetchImpl, googleUrl);
+  const data = await readJson(response);
+  if (data) {
     matches.push(...(data.items ?? []).map(item => {
       const info = item.volumeInfo ?? {};
       return {
@@ -63,10 +80,10 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   openLibraryBooksUrl.searchParams.set("bibkeys", `ISBN:${isbn}`);
   openLibraryBooksUrl.searchParams.set("jscmd", "data");
   openLibraryBooksUrl.searchParams.set("format", "json");
-  const exactBookResponse = await fetchImpl(openLibraryBooksUrl, {
+  const exactBookResponse = await fetchProvider(fetchImpl, openLibraryBooksUrl, {
     headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
   });
-  const exactBookData = exactBookResponse.ok ? await exactBookResponse.json() : {};
+  const exactBookData = await readJson(exactBookResponse) ?? {};
   const exactBook = exactBookData[`ISBN:${isbn}`];
   if (exactBook) {
     matches.push({
@@ -86,17 +103,17 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
     openLibraryUrl.searchParams.set("isbn", isbn);
     openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key");
     openLibraryUrl.searchParams.set("limit", "5");
-    const fallbackResponse = await fetchImpl(openLibraryUrl, {
+    const fallbackResponse = await fetchProvider(fetchImpl, openLibraryUrl, {
       headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
     });
-    if (fallbackResponse.ok) {
-      const fallbackData = await fallbackResponse.json();
+    const fallbackData = await readJson(fallbackResponse);
+    if (fallbackData) {
       let edition = null;
       if (fallbackData.docs?.length) {
-        const editionResponse = await fetchImpl(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
+        const editionResponse = await fetchProvider(fetchImpl, `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`, {
           headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
         });
-        if (editionResponse.ok) edition = await editionResponse.json();
+        edition = await readJson(editionResponse);
       }
       matches.push(...(fallbackData.docs ?? []).map((book, index) => ({
         provider: "Open Library",
@@ -116,7 +133,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   }
 
   if (hardcoverApiToken) {
-    const hardcoverResponse = await fetchImpl("https://api.hardcover.app/v1/graphql", {
+    const hardcoverResponse = await fetchProvider(fetchImpl, "https://api.hardcover.app/v1/graphql", {
       method: "POST",
       headers: {
         authorization: /^Bearer\s/i.test(hardcoverApiToken) ? hardcoverApiToken : `Bearer ${hardcoverApiToken}`,
@@ -138,11 +155,8 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
         variables: { isbn }
       })
     });
-    if (hardcoverResponse.ok) {
-      const hardcoverData = await hardcoverResponse.json();
-      if (hardcoverData.errors?.length) {
-        throw new Error(`Hardcover lookup failed: ${hardcoverData.errors[0].message}`);
-      }
+    const hardcoverData = await readJson(hardcoverResponse);
+    if (hardcoverData && !hardcoverData.errors?.length) {
       const hardcoverMatches = (hardcoverData.data?.editions ?? []).map(edition => ({
         provider: "Hardcover",
         providerId: String(edition.id),
@@ -156,20 +170,19 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
         coverUrl: edition.image?.url ?? ""
       }));
       matches.push(...hardcoverMatches);
-    } else {
-      throw new Error(`Hardcover lookup failed (${hardcoverResponse.status})`);
     }
   }
 
   if (isbnDbApiKey) {
-    const isbnDbResponse = await fetchImpl(`https://api2.isbndb.com/book/${encodeURIComponent(isbn)}`, {
+    const isbnDbResponse = await fetchProvider(fetchImpl, `https://api2.isbndb.com/book/${encodeURIComponent(isbn)}`, {
       headers: {
         Authorization: isbnDbApiKey,
         "User-Agent": "HomeBox-Importer/0.1 (+https://github.com/KoshiirRa/homebox-importer)"
       }
     });
-    if (isbnDbResponse.ok) {
-      const { book } = await isbnDbResponse.json();
+    const isbnDbData = await readJson(isbnDbResponse);
+    if (isbnDbData) {
+      const { book } = isbnDbData;
       if (book?.title) {
         matches.push({
           provider: "ISBNdb",
@@ -184,8 +197,6 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
           coverUrl: book.image ?? ""
         });
       }
-    } else if (![404, 422].includes(isbnDbResponse.status)) {
-      throw new Error(`ISBNdb lookup failed (${isbnDbResponse.status})`);
     }
   }
 

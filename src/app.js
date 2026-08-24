@@ -3,16 +3,21 @@ import { fileURLToPath } from "node:url";
 import { lookupBook } from "./books.js";
 import { isValidGtin, lookupMedia, normalizeBarcode } from "./media.js";
 import { HomeboxClient } from "./homebox.js";
+import { lookupBookCover } from "./vision.js";
 
-export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = lookupMedia } = {}) {
+export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = lookupMedia, coverLookup = null } = {}) {
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "6mb" }));
 
   app.get("/api/health", async (_request, response, next) => {
     try {
       const status = await homebox.status();
-      response.json({ ok: true, homebox: { health: status.health, version: status.build?.version } });
+      response.json({
+        ok: true,
+        homebox: { health: status.health, version: status.build?.version },
+        features: { coverLookup: Boolean(coverLookup) }
+      });
     } catch (error) { next(error); }
   });
 
@@ -37,6 +42,15 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
       const barcode = normalizeBarcode(request.params.barcode);
       const isIsbn = /^(978|979)/.test(barcode) && isValidGtin(barcode);
       response.json(isIsbn ? await bookLookup(barcode) : await mediaLookup(barcode));
+    } catch (error) { next(error); }
+  });
+
+  app.post("/api/books/cover", async (request, response, next) => {
+    try {
+      if (!coverLookup) return response.status(503).json({ error: "Cover scanning is not configured" });
+      const { image, barcode } = request.body ?? {};
+      if (!image) return response.status(400).json({ error: "Choose a book cover photo" });
+      response.json(await coverLookup(image, barcode));
     } catch (error) { next(error); }
   });
 
@@ -83,5 +97,8 @@ export function createConfiguredApp(env = process.env) {
     discogsToken: env.DISCOGS_TOKEN,
     upcItemDbApiKey: env.UPCITEMDB_API_KEY
   });
-  return createApp({ homebox, bookLookup, mediaLookup });
+  const coverLookup = env.GOOGLE_CLOUD_VISION_API_KEY
+    ? (image, barcode) => lookupBookCover(image, barcode, fetch, { apiKey: env.GOOGLE_CLOUD_VISION_API_KEY })
+    : null;
+  return createApp({ homebox, bookLookup, mediaLookup, coverLookup });
 }

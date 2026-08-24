@@ -29,6 +29,35 @@ test("falls back to Open Library when Google Books is rate limited", async () =>
   assert.equal(result[0].coverUrl, "https://covers.openlibrary.org/b/id/123-M.jpg");
 });
 
+test("falls back to Open Library when Google Books cannot be reached", async () => {
+  const fakeFetch = async url => {
+    if (String(url).includes("googleapis.com")) throw new TypeError("fetch failed");
+    if (String(url).includes("/api/books")) {
+      return Response.json({
+        "ISBN:9789190079249": {
+          key: "/books/OL1M",
+          title: "Fallback Book",
+          authors: [{ name: "Library Author" }]
+        }
+      });
+    }
+    throw new Error(`Unexpected provider request: ${url}`);
+  };
+
+  const result = await lookupBook("9789190079249", fakeFetch);
+  assert.equal(result[0].provider, "Open Library");
+  assert.equal(result[0].title, "Fallback Book");
+});
+
+test("returns the manual-entry condition when every provider cannot be reached", async () => {
+  const fakeFetch = async () => { throw new TypeError("fetch failed"); };
+
+  await assert.rejects(
+    () => lookupBook("9789190079249", fakeFetch),
+    /No book metadata found for ISBN 9789190079249/
+  );
+});
+
 test("enriches a generic Open Library work title with exact-edition metadata", async () => {
   const fakeFetch = async url => {
     if (String(url).includes("googleapis.com")) return new Response("rate limited", { status: 429 });

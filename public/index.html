@@ -35,6 +35,15 @@
       <p id="message" role="status" aria-live="polite"></p>
     </section>
 
+    <section id="cover-fallback" class="panel cover-fallback" hidden>
+      <p class="eyebrow">Book lookup fallback</p>
+      <h2>Scan the cover</h2>
+      <p>Take a clear photo of the front cover. The image is sent to Google Cloud Vision for text recognition, then discarded.</p>
+      <label for="cover-photo">Book cover photo</label>
+      <input id="cover-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <p class="field-help">You will review possible matches before anything is added to HomeBox.</p>
+    </section>
+
     <section id="box-view" class="panel box-view" aria-live="polite" hidden></section>
     <section id="results" aria-label="Inventory matches"></section>
   </main>

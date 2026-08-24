@@ -2,6 +2,20 @@
 
 All notable changes to HomeBox Importer are documented here.
 
+## Unreleased
+
+### Added
+
+- Added optional Google Cloud Vision cover OCR after ISBN metadata lookup
+  failures. Cover text is searched through Google Books and Open Library, and
+  candidates require review before import.
+
+### Fixed
+
+- Isolated book metadata provider transport and response failures so one
+  unavailable provider no longer aborts the lookup chain or prevents editable
+  manual entry.
+
 ## [0.3.8] - 2026-08-18
 
 ### Changed
