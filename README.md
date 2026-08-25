@@ -14,6 +14,7 @@ release history and upgrade notes.
 | --- | --- | --- | --- |
 | `HOMEBOX_URL` | yes | `http://homebox:7745` | Base URL visible from the importer container |
 | `HOMEBOX_API_KEY` | yes for authenticated actions | none | Dedicated HomeBox API key |
+| `GOOGLE_BOOKS_API_KEY` | no | none | Identifies Google Books metadata requests for project quota and reporting |
 | `HARDCOVER_API_TOKEN` | no | none | Optional Hardcover token for additional metadata coverage |
 | `ISBNDB_API_KEY` | no | none | Optional ISBNdb key for broader small-press and commercial metadata coverage |
 | `DISCOGS_TOKEN` | no | none | Optional personal Discogs API token for physical music releases |
@@ -46,6 +47,7 @@ Add this service to the same Compose project as HomeBox:
     environment:
       HOMEBOX_URL: http://homebox:7745
       HOMEBOX_API_KEY: ${HOMEBOX_IMPORTER_API_KEY}
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
       HARDCOVER_API_TOKEN: ${HARDCOVER_API_TOKEN:-}
       ISBNDB_API_KEY: ${ISBNDB_API_KEY:-}
       DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
@@ -59,11 +61,11 @@ Add this service to the same Compose project as HomeBox:
 
 The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secret manager and must not be committed.
 
-`HARDCOVER_API_TOKEN` and `ISBNDB_API_KEY` are optional. Lookup order is Google Books, Open Library, Hardcover (when configured), ISBNdb (when configured), and finally editable manual entry. You may paste the Hardcover token with or without its `Bearer ` prefix; the importer sends it only from the server. Hardcover API tokens expire annually, and provider availability and quotas remain subject to their respective services.
+`GOOGLE_BOOKS_API_KEY`, `HARDCOVER_API_TOKEN`, and `ISBNDB_API_KEY` are optional. Lookup order is Google Books, Open Library, Hardcover (when configured), ISBNdb (when configured), and finally editable manual entry. Configure `GOOGLE_BOOKS_API_KEY` with a server-side key restricted to the Google Books API so requests use the project's quota and reporting; the key is never sent to the browser. You may paste the Hardcover token with or without its `Bearer ` prefix; the importer sends it only from the server. Hardcover API tokens expire annually, and provider availability and quotas remain subject to their respective services.
 
 For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
 
-When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, the server sends it to Google Cloud Vision `TEXT_DETECTION`, and the recognized cover text is searched through Google Books and Open Library. The user must review a candidate before importing it. The Vision key stays on the server, is sent in the `x-goog-api-key` header, and is never included in browser code. Cover photos are processed in memory and are not stored by the importer.
+When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, the server sends it to Google Cloud Vision `TEXT_DETECTION`, and the recognized cover text is searched through Google Books and Open Library. If configured, `GOOGLE_BOOKS_API_KEY` is applied to both barcode and cover-text Google Books searches. The user must review a candidate before importing it. Both Google keys stay on the server and are never included in browser code. Cover photos are processed in memory and are not stored by the importer.
 
 ## Box labels
 
@@ -80,13 +82,13 @@ docker compose pull homebox-importer
 docker compose up -d homebox-importer
 ```
 
-For repeatable production deployments, replace `latest` with a published version such as `0.3.10` after validating that release.
+For repeatable production deployments, replace `latest` with a published version such as `0.3.11` after validating that release.
 
 ## Published tags
 
 - `latest`: most recent successful build from `main`
-- `0.3.10` and `0.3`: semantic-version container tags created from Git tag `v0.3.10`
-- `v0.3.10`: source Git tag and container tag
+- `0.3.11` and `0.3`: semantic-version container tags created from Git tag `v0.3.11`
+- `v0.3.11`: source Git tag and container tag
 - `sha-…`: immutable commit build
 
 ## Test/reset boundary

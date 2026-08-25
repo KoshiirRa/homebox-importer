@@ -90,6 +90,7 @@ export function createConfiguredApp(env = process.env) {
     apiKey: env.HOMEBOX_API_KEY
   });
   const bookLookup = isbn => lookupBook(isbn, fetch, {
+    googleBooksApiKey: env.GOOGLE_BOOKS_API_KEY,
     hardcoverApiToken: env.HARDCOVER_API_TOKEN,
     isbnDbApiKey: env.ISBNDB_API_KEY
   });
@@ -98,7 +99,10 @@ export function createConfiguredApp(env = process.env) {
     upcItemDbApiKey: env.UPCITEMDB_API_KEY
   });
   const coverLookup = env.GOOGLE_CLOUD_VISION_API_KEY
-    ? (image, barcode) => lookupBookCover(image, barcode, fetch, { apiKey: env.GOOGLE_CLOUD_VISION_API_KEY })
+    ? (image, barcode) => lookupBookCover(image, barcode, fetch, {
+      apiKey: env.GOOGLE_CLOUD_VISION_API_KEY,
+      googleBooksApiKey: env.GOOGLE_BOOKS_API_KEY
+    })
     : null;
   return createApp({ homebox, bookLookup, mediaLookup, coverLookup });
 }

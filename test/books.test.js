@@ -17,6 +17,20 @@ test("maps Google Books metadata", async () => {
   assert.equal(result[0].coverUrl, "https://example.test/cover.jpg");
 });
 
+test("identifies Google Books requests with the configured API key", async () => {
+  let googleRequest;
+  const fakeFetch = async url => {
+    if (String(url).includes("googleapis.com")) {
+      googleRequest = new URL(url);
+      return Response.json({ items: [{ id: "google-1", volumeInfo: { title: "Authenticated Book" } }] });
+    }
+    return Response.json({});
+  };
+
+  await lookupBook("9780306406157", fakeFetch, { googleBooksApiKey: "test-google-books-key" });
+  assert.equal(googleRequest.searchParams.get("key"), "test-google-books-key");
+});
+
 test("falls back to Open Library when Google Books is rate limited", async () => {
   const fakeFetch = async url => {
     if (String(url).includes("googleapis.com")) return new Response("rate limited", { status: 429 });

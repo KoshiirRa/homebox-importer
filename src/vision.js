@@ -61,7 +61,7 @@ async function safeFetch(fetchImpl, ...args) {
   try { return await fetchImpl(...args); } catch { return null; }
 }
 
-export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "" } = {}) {
+export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "" } = {}) {
   if (!apiKey) throw new Error("Cover scanning is not configured");
   const content = imageContent(image);
   const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", {
@@ -80,6 +80,7 @@ export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKe
   const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
   googleUrl.searchParams.set("q", query);
   googleUrl.searchParams.set("maxResults", "5");
+  if (googleBooksApiKey) googleUrl.searchParams.set("key", googleBooksApiKey);
   const openLibraryUrl = new URL("https://openlibrary.org/search.json");
   openLibraryUrl.searchParams.set("q", query);
   openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,isbn");

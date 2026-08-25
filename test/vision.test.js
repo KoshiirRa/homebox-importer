@@ -21,7 +21,7 @@ test("recognizes cover text and returns reviewable catalog candidates", async ()
     "data:image/jpeg;base64,aGVsbG8=",
     "9789190079249",
     fakeFetch,
-    { apiKey: "test-vision-key" }
+    { apiKey: "test-vision-key", googleBooksApiKey: "test-google-books-key" }
   );
 
   assert.equal(result.text, "Example Book\nTest Author");
@@ -30,6 +30,8 @@ test("recognizes cover text and returns reviewable catalog candidates", async ()
   const visionRequest = requests.find(request => request.url.includes("vision.googleapis.com"));
   assert.equal(visionRequest.options.headers["x-goog-api-key"], "test-vision-key");
   assert.equal(visionRequest.url.includes("test-vision-key"), false);
+  const googleBooksRequest = requests.find(request => request.url.includes("googleapis.com/books"));
+  assert.equal(new URL(googleBooksRequest.url).searchParams.get("key"), "test-google-books-key");
 });
 
 test("requires server-side Vision configuration", async () => {

@@ -4,6 +4,20 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.3.11] - 2026-08-25
+
+### Added
+
+- Added optional server-side `GOOGLE_BOOKS_API_KEY` support for both ISBN and
+  cover-text Google Books searches so requests use configured project quota
+  and reporting without exposing the key to the browser.
+
+### Verification
+
+- The production build and all 32 automated tests pass.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.3.10] - 2026-08-25
 
 ### Added
@@ -73,6 +87,7 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
+[0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
 [0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10
 [0.3.9]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.9
 [0.3.8]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.8

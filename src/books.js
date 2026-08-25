@@ -48,7 +48,7 @@ async function readJson(response) {
   }
 }
 
-export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
+export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiKey = "", hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
   const matches = [];
@@ -56,6 +56,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { hardcoverApiTok
   const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
   googleUrl.searchParams.set("q", `isbn:${isbn}`);
   googleUrl.searchParams.set("maxResults", "5");
+  if (googleBooksApiKey) googleUrl.searchParams.set("key", googleBooksApiKey);
   const response = await fetchProvider(fetchImpl, googleUrl);
   const data = await readJson(response);
   if (data) {
