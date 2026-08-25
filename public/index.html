@@ -41,6 +41,11 @@
       <p>Take a clear photo of the front cover. The image is sent to Google Cloud Vision for text recognition, then discarded.</p>
       <label for="cover-photo">Book cover photo</label>
       <input id="cover-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment">
+      <p id="cover-status" class="cover-status" role="status" aria-live="polite">Choose or take a clear cover photo to begin.</p>
+      <details id="cover-text" class="cover-text" hidden>
+        <summary>Recognized cover text</summary>
+        <pre id="cover-text-value"></pre>
+      </details>
       <p class="field-help">You will review possible matches before anything is added to HomeBox.</p>
     </section>
 

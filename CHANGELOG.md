@@ -4,6 +4,8 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.3.9] - 2026-08-25
+
 ### Added
 
 - Added optional Google Cloud Vision cover OCR after ISBN metadata lookup
@@ -15,6 +17,15 @@ All notable changes to HomeBox Importer are documented here.
 - Isolated book metadata provider transport and response failures so one
   unavailable provider no longer aborts the lookup chain or prevents editable
   manual entry.
+- Kept cover OCR progress and results visible inside the mobile cover panel,
+  distinguished unreadable photos from catalog misses and request failures,
+  and exposed recognized text to assist manual entry.
+
+### Verification
+
+- The production build and all 29 automated tests pass.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
 
 ## [0.3.8] - 2026-08-18
 
@@ -47,4 +58,5 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
+[0.3.9]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.9
 [0.3.8]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.8

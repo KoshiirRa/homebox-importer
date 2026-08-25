@@ -1,4 +1,5 @@
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { coverOutcome } from "./cover-status.js";
 
 const elements = {
   status: document.querySelector("#status"), location: document.querySelector("#location"),
@@ -6,7 +7,9 @@ const elements = {
   scanContainer: document.querySelector("#scan-container"), scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
   video: document.querySelector("#scanner-video"), results: document.querySelector("#results"),
   message: document.querySelector("#message"), boxView: document.querySelector("#box-view"),
-  coverFallback: document.querySelector("#cover-fallback"), coverPhoto: document.querySelector("#cover-photo")
+  coverFallback: document.querySelector("#cover-fallback"), coverPhoto: document.querySelector("#cover-photo"),
+  coverStatus: document.querySelector("#cover-status"), coverText: document.querySelector("#cover-text"),
+  coverTextValue: document.querySelector("#cover-text-value")
 };
 let scannerControls;
 let matches = [];
@@ -25,6 +28,16 @@ function destinationFromQr(value) {
 function message(text, kind = "info") {
   elements.message.textContent = text;
   elements.message.dataset.kind = kind;
+}
+
+function coverMessage(text, kind = "info") {
+  elements.coverStatus.textContent = text;
+  elements.coverStatus.dataset.kind = kind;
+}
+
+function showRecognizedCoverText(text = "") {
+  elements.coverTextValue.textContent = text;
+  elements.coverText.hidden = !text;
 }
 
 async function jsonRequest(url, options) {
@@ -228,7 +241,9 @@ async function coverDataUrl(file) {
 
 async function lookupCover(file) {
   if (!file) return;
-  message("Reading the book cover…");
+  coverMessage("Preparing and reading the book cover…");
+  showRecognizedCoverText();
+  elements.coverFallback.setAttribute("aria-busy", "true");
   elements.coverPhoto.disabled = true;
   try {
     const image = await coverDataUrl(file);
@@ -237,16 +252,18 @@ async function lookupCover(file) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image, barcode: elements.barcode.value })
     });
-    if (!result.matches.length) {
-      return message("Cover text was recognized, but no catalog match was found. Enter the details below.");
-    }
+    const outcome = coverOutcome(result);
+    coverMessage(outcome.message, outcome.kind);
+    showRecognizedCoverText(outcome.text);
+    if (!result.matches.length) return;
     matches = result.matches;
     renderMatches();
     elements.coverFallback.hidden = true;
-    message(`${matches.length} possible cover match${matches.length === 1 ? "" : "es"} found. Review before adding.`, "success");
+    message(outcome.message, outcome.kind);
   } catch (error) {
-    message(error.message, "error");
+    coverMessage(`Cover lookup failed: ${error.message}`, "error");
   } finally {
+    elements.coverFallback.removeAttribute("aria-busy");
     elements.coverPhoto.disabled = false;
     elements.coverPhoto.value = "";
   }
