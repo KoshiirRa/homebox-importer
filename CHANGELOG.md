@@ -4,6 +4,21 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.3.10] - 2026-08-25
+
+### Added
+
+- Displayed the contributing metadata provider on every lookup candidate.
+- Added an `Incorrect match? Scan cover instead` action for provider-backed
+  book results when cover OCR is configured. The suspect result is set aside,
+  manual entry remains available, and the cover workflow is brought into view.
+
+### Verification
+
+- The production build and all 31 automated tests pass.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.3.9] - 2026-08-25
 
 ### Added
@@ -58,5 +73,6 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
+[0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10
 [0.3.9]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.9
 [0.3.8]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.8

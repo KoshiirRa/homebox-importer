@@ -22,3 +22,12 @@ export function coverOutcome(result = {}) {
     text
   };
 }
+
+export function metadataSource(provider) {
+  const source = String(provider ?? "").trim();
+  return source ? `Metadata source: ${source}` : "Metadata source unavailable";
+}
+
+export function canScanCoverInstead(item, coverLookupAvailable) {
+  return Boolean(coverLookupAvailable && item?.isbn && item?.provider !== "Manual entry");
+}

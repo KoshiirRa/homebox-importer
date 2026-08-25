@@ -1,5 +1,5 @@
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { coverOutcome } from "./cover-status.js";
+import { canScanCoverInstead, coverOutcome, metadataSource } from "./cover-status.js";
 
 const elements = {
   status: document.querySelector("#status"), location: document.querySelector("#location"),
@@ -58,6 +58,15 @@ function renderLocations(locations) {
   }
 }
 
+function scanCoverInstead() {
+  renderManualDraft(elements.barcode.value, true);
+  elements.coverFallback.hidden = false;
+  coverMessage("The barcode result was set aside. Choose or take a clear cover photo.");
+  showRecognizedCoverText();
+  message("Incorrect barcode result set aside. Scan the cover or complete the manual entry below.");
+  elements.coverFallback.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function renderMatches() {
   elements.results.replaceChildren();
   matches.forEach((item, index) => {
@@ -83,11 +92,25 @@ function renderMatches() {
     const metadata = document.createElement("p");
     metadata.className = "details";
     metadata.textContent = [item.mediaType || "Book", item.publisher || item.manufacturer, item.publishedDate || item.releaseDate, identifier].filter(Boolean).join(" · ");
+    const source = document.createElement("p");
+    source.className = "metadata-source";
+    source.textContent = metadataSource(item.provider);
+    const actions = document.createElement("div");
+    actions.className = "match-actions";
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Add to selected box";
     button.addEventListener("click", () => importMatch(index));
-    details.append(heading, byline, metadata, button);
+    actions.append(button);
+    if (canScanCoverInstead(item, coverLookupAvailable)) {
+      const coverButton = document.createElement("button");
+      coverButton.type = "button";
+      coverButton.className = "secondary";
+      coverButton.textContent = "Incorrect match? Scan cover instead";
+      coverButton.addEventListener("click", scanCoverInstead);
+      actions.append(coverButton);
+    }
+    details.append(heading, byline, metadata, source, actions);
     card.append(image, details);
     elements.results.append(card);
   });
