@@ -1,4 +1,5 @@
 import { normalizeIsbn } from "./books.js";
+import { searchBraveBooks, titleSimilarity } from "./brave.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
@@ -26,7 +27,7 @@ function googleMatch(item, fallbackIsbn) {
   return {
     provider: "Google Books cover search",
     providerId: item.id,
-    isbn: fallbackIsbn || providerIsbn || "",
+    isbn: normalizeIsbn(providerIsbn) === fallbackIsbn ? fallbackIsbn : normalizeIsbn(providerIsbn),
     title: info.title ?? "Untitled book",
     subtitle: info.subtitle ?? "",
     authors: info.authors ?? [],
@@ -38,10 +39,11 @@ function googleMatch(item, fallbackIsbn) {
 }
 
 function openLibraryMatch(book, fallbackIsbn) {
+  const providerIsbn = (book.isbn ?? []).map(normalizeIsbn).find(Boolean) ?? "";
   return {
     provider: "Open Library cover search",
     providerId: book.key ?? fallbackIsbn,
-    isbn: fallbackIsbn || book.isbn?.[0] || "",
+    isbn: providerIsbn === fallbackIsbn ? fallbackIsbn : providerIsbn,
     title: book.title ?? "Untitled book",
     subtitle: book.subtitle ?? "",
     authors: book.author_name ?? [],
@@ -61,7 +63,7 @@ async function safeFetch(fetchImpl, ...args) {
   try { return await fetchImpl(...args); } catch { return null; }
 }
 
-export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "" } = {}) {
+export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "", braveSearchApiKey = "" } = {}) {
   if (!apiKey) throw new Error("Cover scanning is not configured");
   const content = imageContent(image);
   const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", {
@@ -92,10 +94,14 @@ export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKe
       headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
     }).then(responseJson)
   ]);
-  const matches = [
+  const catalogMatches = [
     ...(googleData?.items ?? []).map(item => googleMatch(item, isbn)),
     ...(openLibraryData?.docs ?? []).map(book => openLibraryMatch(book, isbn))
-  ];
+  ].filter(book => titleSimilarity(query, `${book.title} ${book.subtitle} ${book.authors.join(" ")}`) >= 0.7);
+  const braveMatches = braveSearchApiKey && !catalogMatches.some(book => book.isbn === isbn)
+    ? await searchBraveBooks({ isbn, text: query }, fetchImpl, { apiKey: braveSearchApiKey })
+    : [];
+  const matches = [...braveMatches, ...catalogMatches];
   const uniqueMatches = [...new Map(matches.map(book => [
     `${book.title}\n${book.authors.join(",")}`.toLocaleLowerCase(), book
   ])).values()];

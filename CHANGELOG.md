@@ -4,6 +4,24 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.3.12] - 2026-08-26
+
+### Added
+
+- Added an optional server-side Brave Search API fallback for exact ISBN and
+  OCR-title searches when catalog providers do not return a trustworthy match.
+
+### Fixed
+
+- Reject loosely related cover-search candidates using distinctive OCR title
+  overlap and never attach a scanned ISBN to a result that does not report it.
+
+### Verification
+
+- The production build and all 39 automated tests pass.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.3.11] - 2026-08-25
 
 ### Added
@@ -87,6 +105,7 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
+[0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
 [0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
 [0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10
 [0.3.9]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.9

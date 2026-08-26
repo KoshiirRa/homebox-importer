@@ -15,7 +15,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
 - Supported workflows: ISBN books plus UPC/EAN music, movies, video games, and ordinary products
-- Book metadata providers: Google Books with optional server-side API key, Open Library, optional Hardcover, then optional ISBNdb fallback
+- Book metadata providers: Google Books with optional server-side API key, Open Library, optional Hardcover, optional ISBNdb, then optional Brave Search web fallback
 - General media providers: optional Discogs, MusicBrainz, then UPCitemdb
 - Box labels: printable QR labels deep-linking to a preselected HomeBox destination and current contents view, including QL-810WC/DK-2205 continuous-roll support
 - Barcode scanning: ZXing in the browser

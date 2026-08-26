@@ -1,3 +1,5 @@
+import { searchBraveBooks } from "./brave.js";
+
 export function normalizeIsbn(value) {
   return String(value ?? "").replace(/[^0-9X]/gi, "").toUpperCase();
 }
@@ -48,7 +50,7 @@ async function readJson(response) {
   }
 }
 
-export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiKey = "", hardcoverApiToken = "", isbnDbApiKey = "" } = {}) {
+export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiKey = "", hardcoverApiToken = "", isbnDbApiKey = "", braveSearchApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
   if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
   const matches = [];
@@ -62,10 +64,11 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
   if (data) {
     matches.push(...(data.items ?? []).map(item => {
       const info = item.volumeInfo ?? {};
+      const reportedIsbns = (info.industryIdentifiers ?? []).map(identifier => normalizeIsbn(identifier.identifier));
       return {
         provider: "Google Books",
         providerId: item.id,
-        isbn,
+        isbn: reportedIsbns.includes(isbn) ? isbn : "",
         title: info.title ?? "Untitled book",
         subtitle: info.subtitle ?? "",
         authors: info.authors ?? [],
@@ -102,7 +105,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
   } else {
     const openLibraryUrl = new URL("https://openlibrary.org/search.json");
     openLibraryUrl.searchParams.set("isbn", isbn);
-    openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key");
+    openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,edition_key,isbn");
     openLibraryUrl.searchParams.set("limit", "5");
     const fallbackResponse = await fetchProvider(fetchImpl, openLibraryUrl, {
       headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
@@ -119,7 +122,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
       matches.push(...(fallbackData.docs ?? []).map((book, index) => ({
         provider: "Open Library",
         providerId: index === 0 && edition?.key ? edition.key : book.key ?? isbn,
-        isbn,
+        isbn: (book.isbn ?? []).map(normalizeIsbn).includes(isbn) ? isbn : "",
         title: index === 0 ? edition?.title || book.title || "Untitled book" : book.title ?? "Untitled book",
         subtitle: index === 0 ? edition?.subtitle || book.subtitle || "" : book.subtitle ?? "",
         authors: book.author_name ?? [],
@@ -161,7 +164,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
       const hardcoverMatches = (hardcoverData.data?.editions ?? []).map(edition => ({
         provider: "Hardcover",
         providerId: String(edition.id),
-        isbn,
+        isbn: [edition.isbn_10, edition.isbn_13].map(normalizeIsbn).includes(isbn) ? isbn : "",
         title: edition.title || edition.book?.title || "Untitled book",
         subtitle: edition.subtitle || edition.book?.subtitle || "",
         authors: (edition.book?.contributions ?? []).map(contribution => contribution.author?.name).filter(Boolean),
@@ -188,7 +191,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
         matches.push({
           provider: "ISBNdb",
           providerId: book.isbn13 || book.isbn || isbn,
-          isbn,
+          isbn: [book.isbn13, book.isbn].map(normalizeIsbn).includes(isbn) ? isbn : "",
           title: book.title,
           subtitle: "",
           authors: book.authors ?? [],
@@ -201,10 +204,17 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
     }
   }
 
+  if (braveSearchApiKey && !matches.some(book => book.isbn === isbn)) {
+    matches.push(...await searchBraveBooks({ isbn }, fetchImpl, { apiKey: braveSearchApiKey }));
+  }
+
   if (!matches.length) throw new Error(`No book metadata found for ISBN ${isbn}`);
   const uniqueMatches = [...new Map(matches.map(book => [
     bookDisplayTitle(book).trim().toLocaleLowerCase(),
     book
   ])).values()];
-  return uniqueMatches.sort((left, right) => metadataScore(right) - metadataScore(left));
+  return uniqueMatches.sort((left, right) => {
+    const exactDifference = Number(right.isbn === isbn) - Number(left.isbn === isbn);
+    return exactDifference || metadataScore(right) - metadataScore(left);
+  });
 }

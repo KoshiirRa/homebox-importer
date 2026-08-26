@@ -241,3 +241,29 @@ test("does not call ISBNdb when no key is configured", async () => {
   await assert.rejects(() => lookupBook("9798986753447", fakeFetch), /No book metadata found/);
   assert.equal(urls.some(url => url.includes("isbndb.com")), false);
 });
+
+test("ranks an exact-ISBN Brave fallback above an unverified catalog candidate", async () => {
+  const fakeFetch = async url => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("googleapis.com")) {
+      return Response.json({ items: [{ id: "wrong-google", volumeInfo: {
+        title: "Star Trek Adventures: The Sciences Division",
+        description: "A long and detailed description that must not outweigh exact ISBN evidence."
+      } }] });
+    }
+    if (requestUrl.includes("openlibrary.org")) return Response.json({ docs: [] });
+    if (requestUrl.includes("api.search.brave.com")) {
+      return Response.json({ web: { results: [{
+        title: "Star Trek Adventures RPG: Species Sourcebook | 978-1-80281-218-3",
+        url: "https://example.test/978-1-80281-218-3",
+        description: "Species Sourcebook"
+      }] } });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const result = await lookupBook("9781802812183", fakeFetch, { braveSearchApiKey: "brave-key" });
+  assert.equal(result[0].provider, "Brave Search");
+  assert.equal(result[0].isbn, "9781802812183");
+  assert.equal(result[1].isbn, "");
+});
