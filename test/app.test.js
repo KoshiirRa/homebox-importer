@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
 
 test("serves the browser workflow through HTTP routes", async t => {
+  const logLines = [];
+  const logger = { info: line => logLines.push(line) };
   const homebox = {
     status: async () => ({ health: true, build: { version: "v-test" } }),
     locations: async () => [{ id: "box-id", name: "Test Box", path: "Storage → Test Box" }],
@@ -11,16 +13,16 @@ test("serves the browser workflow through HTTP routes", async t => {
       { id: "records-id", name: "Uninventoried Records", path: "Storage → Uninventoried Records", isLocation: false }
     ],
     boxContents: async id => ({ box: { id, name: "Test Box", assetId: "BOX-001" }, items: [{ id: "item-1", name: "Test Drill", quantity: 2 }] }),
-    createBook: async book => ({ id: "book-id", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 }),
-    createInventoryItem: async item => ({ id: "item-id", name: item.title, parent: { id: item.parentId, name: "Test Box" }, quantity: item.quantity })
+    createBook: async book => ({ id: "book-id", assetId: "BOOK-001", name: book.title, parent: { id: book.parentId, name: "Test Box" }, quantity: 1 }),
+    createInventoryItem: async item => ({ id: "item-id", assetId: "ITEM-001", name: item.title, parent: { id: item.parentId, name: "Test Box" }, quantity: item.quantity })
   };
-  const bookLookup = async isbn => [{ isbn, title: "Test Book", authors: ["Test Author"] }];
-  const mediaLookup = async barcode => [{ barcode, title: "Test Game", mediaType: "Video Game", quantity: 2 }];
+  const bookLookup = async isbn => [{ provider: "Test Books", isbn, title: "Test Book", authors: ["Test Author"] }];
+  const mediaLookup = async barcode => [{ provider: "Test Media", barcode, title: "Test Game", mediaType: "Video Game", quantity: 2 }];
   const coverLookup = async (_image, barcode) => ({
     text: "Test Book\nTest Author",
-    matches: [{ isbn: barcode, title: "Test Book", authors: ["Test Author"] }]
+    matches: [{ provider: "Test Cover Search", isbn: barcode, title: "Test Book", authors: ["Test Author"] }]
   });
-  const server = createApp({ homebox, bookLookup, mediaLookup, coverLookup }).listen(0, "127.0.0.1");
+  const server = createApp({ homebox, bookLookup, mediaLookup, coverLookup, logger }).listen(0, "127.0.0.1");
   await new Promise((resolve, reject) => {
     server.once("listening", resolve);
     server.once("error", reject);
@@ -80,4 +82,22 @@ test("serves the browser workflow through HTTP routes", async t => {
   });
   assert.equal(itemResponse.status, 201);
   assert.equal((await itemResponse.json()).quantity, 2);
+
+  const events = logLines.map(line => JSON.parse(line));
+  assert.deepEqual(events.map(event => `${event.event}:${event.workflow}`), [
+    "lookup.succeeded:book", "lookup.succeeded:media", "lookup.succeeded:cover",
+    "import.succeeded:book", "import.succeeded:media"
+  ]);
+  assert.deepEqual(events.map(event => event.provider), [
+    "Test Books", "Test Media", "Test Cover Search", "Test Books", "Test Media"
+  ]);
+  assert.equal(events[0].identifier, "9780306406157");
+  assert.equal(events[0].resultCount, 1);
+  assert.equal(events[3].destinationId, "box-id");
+  assert.equal(events[3].entityId, "book-id");
+  assert.equal(events[3].assetId, "BOOK-001");
+  assert.equal(events[4].quantity, 2);
+  assert.ok(events.every(event => Number.isInteger(event.durationMs) && event.durationMs >= 0));
+  const serializedLogs = logLines.join("\n");
+  assert.doesNotMatch(serializedLogs, /data:image|aGVsbG8=|description|authorization|api.?key/i);
 });

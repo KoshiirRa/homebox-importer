@@ -84,14 +84,27 @@ docker compose pull homebox-importer
 docker compose up -d homebox-importer
 ```
 
-For repeatable production deployments, replace `latest` with a published version such as `0.3.12` after validating that release.
+For repeatable production deployments, replace `latest` with a published version such as `0.3.13` after validating that release.
 
 ## Published tags
 
 - `latest`: most recent successful build from `main`
-- `0.3.12` and `0.3`: semantic-version container tags created from Git tag `v0.3.12`
-- `v0.3.12`: source Git tag and container tag
+- `0.3.13` and `0.3`: semantic-version container tags created from Git tag `v0.3.13`
+- `v0.3.13`: source Git tag and container tag
 - `sha-…`: immutable commit build
+
+## Operational logs
+
+Successful metadata lookups and HomeBox imports emit one structured JSON line
+to standard output. Lookup events include the workflow, normalized identifier,
+selected provider, result count, and elapsed milliseconds. Import events add the
+destination ID, resulting HomeBox entity and asset IDs, and quantity. Logs never
+include provider credentials, authorization headers, cover image payloads,
+descriptions, or complete upstream response bodies.
+
+The example Compose service uses Docker's `json-file` driver with three 10 MB
+rotated files. These logs survive container restarts but are not durable
+application storage and are normally removed when the container is removed.
 
 ## Test/reset boundary
 

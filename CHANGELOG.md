@@ -4,6 +4,22 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.3.13] - 2026-08-26
+
+### Added
+
+- Added secret-safe structured JSON success logs for book, media, and cover
+  lookups, including the selected provider, result count, and elapsed time.
+- Added structured import completion logs with destination, HomeBox entity and
+  asset identifiers, quantity, provider, and elapsed time.
+- Added bounded Docker `json-file` rotation to the example Compose service.
+
+### Verification
+
+- The production build and all automated tests pass.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.3.12] - 2026-08-26
 
 ### Added
@@ -105,6 +121,7 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
+[0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
 [0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
 [0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
 [0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10
