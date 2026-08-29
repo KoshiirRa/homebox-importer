@@ -67,7 +67,7 @@ The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secre
 
 For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
 
-When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, the server sends it to Google Cloud Vision `TEXT_DETECTION`, and the recognized cover text is searched through Google Books and Open Library. When configured, Brave Search is the final cover-search fallback: it tries the exact ISBN first, then sufficiently similar OCR title text. Candidates with weak title overlap are rejected, and a scanned ISBN is never assigned to a provider result unless that result reports the same ISBN. The user must review a candidate before importing it. Provider keys stay on the server and are never included in browser code. Cover photos are processed in memory and are not stored by the importer.
+When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, and the server uses Google Cloud Vision `TEXT_DETECTION`. Structured lines, words, confidence, and bounding boxes are consumed when present, with compatibility for plain `fullTextAnnotation.text` responses. A maximum of three likely title or title-plus-author queries use Google Books `intitle:`/`inauthor:` and Open Library `title`/`author` fields in parallel. Candidates are deduplicated and scored for exact ISBN, distinctive title, author, subtitle or series, and completeness; conflicting ISBNs receive a strong penalty and are never rewritten to the scanned ISBN. Weak matches are rejected. If readable text produces no trustworthy candidate, the manual book form receives clearly labeled, editable OCR suggestions and preserves the recognized lines for review. Provider keys stay on the server and are never included in browser code. Cover photos and OCR text are processed in memory and are not stored by the importer.
 
 ## Box labels
 
@@ -84,23 +84,29 @@ docker compose pull homebox-importer
 docker compose up -d homebox-importer
 ```
 
-For repeatable production deployments, replace `latest` with a published version such as `0.3.13` after validating that release.
+For repeatable production deployments, replace `latest` with a published version such as `0.4.0` after validating that release.
 
 ## Published tags
 
 - `latest`: most recent successful build from `main`
-- `0.3.13` and `0.3`: semantic-version container tags created from Git tag `v0.3.13`
-- `v0.3.13`: source Git tag and container tag
+- `0.4.0` and `0.4`: semantic-version container tags created from Git tag `v0.4.0`
+- `v0.4.0`: source Git tag and container tag
 - `sha-…`: immutable commit build
 
 ## Operational logs
 
-Successful metadata lookups and HomeBox imports emit one structured JSON line
-to standard output. Lookup events include the workflow, normalized identifier,
-selected provider, result count, and elapsed milliseconds. Import events add the
-destination ID, resulting HomeBox entity and asset IDs, and quantity. Logs never
+Every metadata lookup emits exactly one terminal `lookup.succeeded` or
+`lookup.failed` structured JSON line. Events include an opaque correlation ID,
+workflow, duration, and a normalized identifier only when valid. Successes add
+the selected provider and result count; failures use `invalid_identifier`,
+`provider_no_match`, `provider_unavailable`, `cover_no_text`, or
+`cover_no_match` plus a bounded provider-attempt summary. Expected validation
+and no-match outcomes do not print stack traces. Unexpected internal defects
+retain a secret-safe stack trace. Import events include provider/manual
+provenance, destination ID, resulting HomeBox entity and asset IDs, and
+quantity; HomeBox write failures use `homebox_failure`. Logs never
 include provider credentials, authorization headers, cover image payloads,
-descriptions, or complete upstream response bodies.
+descriptions, OCR text, or complete upstream response bodies.
 
 The example Compose service uses Docker's `json-file` driver with three 10 MB
 rotated files. These logs survive container restarts but are not durable

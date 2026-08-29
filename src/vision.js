@@ -1,109 +1,109 @@
-import { normalizeIsbn } from "./books.js";
-import { searchBraveBooks, titleSimilarity } from "./brave.js";
+import { isValidIsbn, normalizeIsbn } from "./books.js";
+import { OperationalError, providerAttempt } from "./operational-errors.js";
+import { searchBraveBooks } from "./brave.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_QUERIES = 3;
+const RESULTS_PER_QUERY = 5;
 
 function imageContent(value) {
   const match = String(value ?? "").match(/^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
-  if (!match) throw new Error("Choose a JPEG, PNG, or WebP cover photo");
-  const content = match[1];
-  if (Math.ceil(content.length * 3 / 4) > MAX_IMAGE_BYTES) {
-    throw new Error("Cover photo must be smaller than 4 MB");
+  if (!match) throw new OperationalError("invalid_identifier", "Choose a JPEG, PNG, or WebP cover photo", { status: 400 });
+  if (Math.ceil(match[1].length * 3 / 4) > MAX_IMAGE_BYTES) throw new OperationalError("invalid_identifier", "Cover photo must be smaller than 4 MB", { status: 400 });
+  return match[1];
+}
+
+function wordsFromParagraph(paragraph) {
+  return (paragraph.words ?? []).map(word => ({ text: (word.symbols ?? []).map(symbol => symbol.text ?? "").join(""), confidence: word.confidence ?? null, boundingBox: word.boundingBox ?? null })).filter(word => word.text);
+}
+
+export function extractOcr(annotation = {}) {
+  const structuredLines = [];
+  for (const page of annotation.fullTextAnnotation?.pages ?? []) for (const block of page.blocks ?? []) for (const paragraph of block.paragraphs ?? []) {
+    const words = wordsFromParagraph(paragraph);
+    const text = words.map(word => word.text).join(" ").replace(/\s+/g, " ").trim();
+    if (text) structuredLines.push({ text, words, confidence: paragraph.confidence ?? block.confidence ?? null, boundingBox: paragraph.boundingBox ?? block.boundingBox ?? null });
   }
-  return content;
+  const text = annotation.fullTextAnnotation?.text || annotation.textAnnotations?.[0]?.description || structuredLines.map(line => line.text).join("\n");
+  const fallbackLines = String(text).split(/\r?\n/).map(value => value.replace(/\s+/g, " ").trim()).filter(Boolean);
+  return { text: String(text), lines: structuredLines.length ? structuredLines : fallbackLines.map(value => ({ text: value, words: [], confidence: null, boundingBox: null })) };
 }
 
-function coverQuery(text) {
-  const lines = String(text ?? "").split(/\r?\n/)
-    .map(line => line.replace(/\s+/g, " ").trim())
-    .filter(line => line.length >= 2 && line.length <= 120);
-  return [...new Set(lines)].slice(0, 8).join(" ").slice(0, 500);
+export function buildCoverQueries(ocr) {
+  const lines = ocr.lines.filter(line => line.text.length >= 2 && line.text.length <= 100 && /[A-Za-z]/.test(line.text)).slice(0, 10);
+  const ranked = [...lines].sort((a, b) => (b.confidence ?? .5) - (a.confidence ?? .5) || b.text.length - a.text.length);
+  const title = ranked[0]?.text ?? "";
+  const author = ranked.slice(1).find(line => /\b(?:by|author)\b/i.test(line.text))?.text.replace(/^.*?\b(?:by|author)\b\s*/i, "") || ranked.slice(1, 4).find(line => line.text.split(/\s+/).length <= 5)?.text || "";
+  const queries = title ? [{ title, author }] : [];
+  for (const line of ranked.slice(1)) {
+    if (queries.length >= MAX_QUERIES) break;
+    if (!queries.some(query => query.title.toLowerCase() === line.text.toLowerCase())) queries.push({ title: line.text, author: "" });
+  }
+  return queries;
 }
 
-function googleMatch(item, fallbackIsbn) {
+function tokens(value) { return new Set(String(value).toLowerCase().match(/[a-z0-9]{3,}/g) ?? []); }
+function overlap(left, right) {
+  const a = tokens(left); const b = tokens(right);
+  return a.size && b.size ? [...a].filter(token => b.has(token)).length / Math.min(a.size, b.size) : 0;
+}
+
+export function scoreCoverCandidate(candidate, query, scannedIsbn = "") {
+  const reported = normalizeIsbn(candidate.isbn);
+  const exact = Boolean(scannedIsbn && reported === scannedIsbn);
+  const conflict = Boolean(scannedIsbn && reported && reported !== scannedIsbn);
+  const completeness = [candidate.authors?.length, candidate.publisher, candidate.publishedDate, candidate.coverUrl].filter(Boolean).length;
+  return (exact ? 1000 : 0) + overlap(query.title, `${candidate.title} ${candidate.subtitle}`) * 100 + overlap(query.author, (candidate.authors ?? []).join(" ")) * 35 + overlap(query.title, candidate.subtitle ?? "") * 15 + completeness * 2 - (conflict ? 30 : 0);
+}
+
+function googleMatch(item) {
   const info = item.volumeInfo ?? {};
-  const providerIsbn = (info.industryIdentifiers ?? [])
-    .find(identifier => identifier.type === "ISBN_13")?.identifier;
-  return {
-    provider: "Google Books cover search",
-    providerId: item.id,
-    isbn: normalizeIsbn(providerIsbn) === fallbackIsbn ? fallbackIsbn : normalizeIsbn(providerIsbn),
-    title: info.title ?? "Untitled book",
-    subtitle: info.subtitle ?? "",
-    authors: info.authors ?? [],
-    publisher: info.publisher ?? "",
-    publishedDate: info.publishedDate ?? "",
-    description: info.description ?? "",
-    coverUrl: info.imageLinks?.thumbnail?.replace(/^http:/, "https:") ?? ""
-  };
+  const isbn = (info.industryIdentifiers ?? []).map(value => normalizeIsbn(value.identifier)).find(isValidIsbn) ?? "";
+  return { provider: "Google Books cover search", providerId: item.id, isbn, title: info.title ?? "Untitled book", subtitle: info.subtitle ?? "", authors: info.authors ?? [], publisher: info.publisher ?? "", publishedDate: info.publishedDate ?? "", description: info.description ?? "", coverUrl: info.imageLinks?.thumbnail?.replace(/^http:/, "https:") ?? "" };
 }
 
-function openLibraryMatch(book, fallbackIsbn) {
-  const providerIsbn = (book.isbn ?? []).map(normalizeIsbn).find(Boolean) ?? "";
-  return {
-    provider: "Open Library cover search",
-    providerId: book.key ?? fallbackIsbn,
-    isbn: providerIsbn === fallbackIsbn ? fallbackIsbn : providerIsbn,
-    title: book.title ?? "Untitled book",
-    subtitle: book.subtitle ?? "",
-    authors: book.author_name ?? [],
-    publisher: book.publisher?.[0] ?? "",
-    publishedDate: book.first_publish_year ? String(book.first_publish_year) : "",
-    description: "",
-    coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : ""
-  };
+function openLibraryMatch(book) {
+  const isbn = (book.isbn ?? []).map(normalizeIsbn).find(isValidIsbn) ?? "";
+  return { provider: "Open Library cover search", providerId: book.key ?? "", isbn, title: book.title ?? "Untitled book", subtitle: book.subtitle ?? "", authors: book.author_name ?? [], publisher: book.publisher?.[0] ?? "", publishedDate: book.first_publish_year ? String(book.first_publish_year) : "", description: "", coverUrl: book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : "" };
 }
 
-async function responseJson(response) {
-  if (!response?.ok) return null;
-  try { return await response.json(); } catch { return null; }
-}
-
-async function safeFetch(fetchImpl, ...args) {
-  try { return await fetchImpl(...args); } catch { return null; }
-}
+async function responseJson(response) { if (!response?.ok) return null; try { return await response.json(); } catch { return null; } }
+async function safeFetch(fetchImpl, ...args) { try { return await fetchImpl(...args); } catch { return null; } }
+function manualDraft(ocr, queries) { return { source: "ocr", title: queries[0]?.title ?? ocr.lines[0]?.text ?? "", subtitle: "", authors: queries[0]?.author ? [queries[0].author] : [], lines: ocr.lines.map(line => line.text).slice(0, 12) }; }
 
 export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "", braveSearchApiKey = "" } = {}) {
-  if (!apiKey) throw new Error("Cover scanning is not configured");
+  if (!apiKey) throw new OperationalError("provider_unavailable", "Cover scanning is not configured", { status: 503 });
   const content = imageContent(image);
-  const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({ requests: [{ image: { content }, features: [{ type: "TEXT_DETECTION", maxResults: 1 }] }] })
-  });
+  const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify({ requests: [{ image: { content }, features: [{ type: "TEXT_DETECTION", maxResults: 1 }] }] }) });
   const visionData = await responseJson(visionResponse);
   const annotation = visionData?.responses?.[0];
-  if (!visionData || annotation?.error) throw new Error("Cover text recognition failed");
-  const text = annotation?.fullTextAnnotation?.text || annotation?.textAnnotations?.[0]?.description || "";
-  const query = coverQuery(text);
-  if (!query) return { text: "", matches: [] };
-
-  const isbn = normalizeIsbn(barcode);
-  const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
-  googleUrl.searchParams.set("q", query);
-  googleUrl.searchParams.set("maxResults", "5");
-  if (googleBooksApiKey) googleUrl.searchParams.set("key", googleBooksApiKey);
-  const openLibraryUrl = new URL("https://openlibrary.org/search.json");
-  openLibraryUrl.searchParams.set("q", query);
-  openLibraryUrl.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,isbn");
-  openLibraryUrl.searchParams.set("limit", "5");
-
-  const [googleData, openLibraryData] = await Promise.all([
-    safeFetch(fetchImpl, googleUrl).then(responseJson),
-    safeFetch(fetchImpl, openLibraryUrl, {
-      headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" }
-    }).then(responseJson)
-  ]);
-  const catalogMatches = [
-    ...(googleData?.items ?? []).map(item => googleMatch(item, isbn)),
-    ...(openLibraryData?.docs ?? []).map(book => openLibraryMatch(book, isbn))
-  ].filter(book => titleSimilarity(query, `${book.title} ${book.subtitle} ${book.authors.join(" ")}`) >= 0.7);
-  const braveMatches = braveSearchApiKey && !catalogMatches.some(book => book.isbn === isbn)
-    ? await searchBraveBooks({ isbn, text: query }, fetchImpl, { apiKey: braveSearchApiKey })
-    : [];
-  const matches = [...braveMatches, ...catalogMatches];
-  const uniqueMatches = [...new Map(matches.map(book => [
-    `${book.title}\n${book.authors.join(",")}`.toLocaleLowerCase(), book
-  ])).values()];
-  return { text, matches: uniqueMatches.slice(0, 8) };
+  if (!visionData || annotation?.error) throw new OperationalError("provider_unavailable", "Cover text recognition failed", { status: 502, attempts: [providerAttempt("Google Cloud Vision", "unavailable")] });
+  const ocr = extractOcr(annotation);
+  const queries = buildCoverQueries(ocr);
+  if (!queries.length) throw new OperationalError("cover_no_text", "No readable cover text was found", { status: 404, attempts: [providerAttempt("Google Cloud Vision", "no_text")] });
+  const isbn = isValidIsbn(barcode) ? normalizeIsbn(barcode) : "";
+  const attempts = [providerAttempt("Google Cloud Vision", "matched")];
+  const calls = queries.flatMap(query => {
+    const google = new URL("https://www.googleapis.com/books/v1/volumes");
+    google.searchParams.set("q", `intitle:${query.title}${query.author ? ` inauthor:${query.author}` : ""}`);
+    google.searchParams.set("maxResults", String(RESULTS_PER_QUERY));
+    if (googleBooksApiKey) google.searchParams.set("key", googleBooksApiKey);
+    const open = new URL("https://openlibrary.org/search.json");
+    open.searchParams.set("title", query.title); if (query.author) open.searchParams.set("author", query.author);
+    open.searchParams.set("fields", "key,title,subtitle,author_name,publisher,first_publish_year,cover_i,isbn"); open.searchParams.set("limit", String(RESULTS_PER_QUERY));
+    return [safeFetch(fetchImpl, google).then(responseJson).then(data => ({ query, provider: "Google Books", candidates: (data?.items ?? []).map(googleMatch), available: Boolean(data) })), safeFetch(fetchImpl, open, { headers: { "User-Agent": "HomeBox-Importer/0.1 (personal inventory application)" } }).then(responseJson).then(data => ({ query, provider: "Open Library", candidates: (data?.docs ?? []).map(openLibraryMatch), available: Boolean(data) }))];
+  });
+  const results = await Promise.all(calls);
+  for (const result of results) attempts.push(providerAttempt(result.provider, result.available ? (result.candidates.length ? "matched" : "no_match") : "unavailable"));
+  const braveMatches = braveSearchApiKey ? await searchBraveBooks({ isbn, text: queries[0].title }, fetchImpl, { apiKey: braveSearchApiKey }) : [];
+  if (braveSearchApiKey) attempts.push(providerAttempt("Brave Search", braveMatches.length ? "matched" : "no_match"));
+  const ranked = [
+    ...braveMatches.map(candidate => ({ candidate, score: scoreCoverCandidate(candidate, queries[0], isbn) })),
+    ...results.flatMap(result => result.candidates.map(candidate => ({ candidate, score: scoreCoverCandidate(candidate, result.query, isbn) })))
+  ].sort((a, b) => b.score - a.score);
+  const unique = [...new Map(ranked.map(entry => [`${entry.candidate.isbn}|${entry.candidate.title}|${entry.candidate.authors.join(",")}`.toLowerCase(), entry])).values()];
+  const matches = unique.filter(entry => entry.score >= 65).map(entry => ({ ...entry.candidate, matchScore: Math.round(entry.score) })).slice(0, 8);
+  const draft = manualDraft(ocr, queries);
+  if (!matches.length) throw new OperationalError("cover_no_match", "No trustworthy catalog match was found", { status: 404, attempts, details: { text: ocr.text, lines: ocr.lines, draft } });
+  return { text: ocr.text, lines: ocr.lines, draft, matches };
 }

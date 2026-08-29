@@ -4,6 +4,19 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.0] - 2026-08-29
+
+### Added
+
+- Added coded operational failures, opaque correlation IDs, secret-safe provider-attempt summaries, and exactly one terminal structured event per lookup.
+- Added structured Vision OCR line/word extraction, bounded fielded catalog searches, candidate deduplication and scoring, and editable OCR-assisted manual book drafts.
+- Added import provenance for provider candidates and the distinct manual-entry paths after no match, rejected candidate, or unsuccessful cover search.
+
+### Changed
+
+- Expected validation and no-match outcomes no longer emit stack traces; unexpected defects retain secret-safe diagnostic stacks.
+- Cover candidates with conflicting ISBNs are penalized and never receive the scanned ISBN, while exact-ISBN candidates always outrank OCR-only results.
+
 ## [0.3.13] - 2026-08-26
 
 ### Added
@@ -122,6 +135,7 @@ All notable changes to HomeBox Importer are documented here.
   `linux/amd64` and `linux/arm64` container image.
 
 [0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
+[0.4.0]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.0
 [0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
 [0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
 [0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10

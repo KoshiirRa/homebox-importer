@@ -14,6 +14,7 @@ const elements = {
 let scannerControls;
 let matches = [];
 let coverLookupAvailable = false;
+let manualProvenance = "manual_after_no_match";
 
 function destinationFromQr(value) {
   try {
@@ -43,7 +44,11 @@ function showRecognizedCoverText(text = "") {
 async function jsonRequest(url, options) {
   const response = await fetch(url, options);
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body.error ?? `Request failed (${response.status})`);
+    Object.assign(error, body);
+    throw error;
+  }
   return body;
 }
 
@@ -59,7 +64,8 @@ function renderLocations(locations) {
 }
 
 function scanCoverInstead() {
-  renderManualDraft(elements.barcode.value, true);
+  manualProvenance = "manual_after_rejected_candidate";
+  renderManualDraft(elements.barcode.value, true, null, manualProvenance);
   elements.coverFallback.hidden = false;
   coverMessage("The barcode result was set aside. Choose or take a clear cover photo.");
   showRecognizedCoverText();
@@ -179,14 +185,14 @@ function addTextField(container, labelText, value, onInput, required = false) {
   return input;
 }
 
-function renderManualDraft(barcode, isBook = false) {
+function renderManualDraft(barcode, isBook = false, draft = null, provenance = "manual_after_no_match") {
   const item = isBook ? {
     provider: "Manual entry", providerId: barcode, isbn: String(barcode).replace(/[^0-9X]/gi, "").toUpperCase(),
-    title: "", subtitle: "", authors: [], publisher: "", publishedDate: "", description: "", coverUrl: ""
+    title: draft?.title ?? "", subtitle: draft?.subtitle ?? "", authors: draft?.authors ?? [], publisher: "", publishedDate: "", description: "", coverUrl: "", provenance
   } : {
     provider: "Manual entry", providerId: barcode, barcode: String(barcode).replace(/\D/g, ""),
     title: "", mediaType: "Item", creators: [], manufacturer: "", modelNumber: "", releaseDate: "",
-    description: "", imageUrl: "", quantity: 1
+    description: "", imageUrl: "", quantity: 1, provenance
   };
   matches = [item];
   elements.results.replaceChildren();
@@ -199,9 +205,16 @@ function renderManualDraft(barcode, isBook = false) {
   const heading = document.createElement("h3");
   heading.textContent = isBook ? "Add book details" : "Add item details";
   fields.append(heading);
-  const titleInput = addTextField(fields, "Title", "", value => { item.title = value.trim(); }, true);
+  if (draft) {
+    const suggestion = document.createElement("p");
+    suggestion.className = "field-help";
+    suggestion.textContent = "Suggested from cover OCR. Review and edit every value before importing.";
+    fields.append(suggestion);
+  }
+  const titleInput = addTextField(fields, draft ? "Title (OCR suggestion)" : "Title", item.title, value => { item.title = value.trim(); }, true);
   if (isBook) {
-    addTextField(fields, "Author(s), separated by commas", "", value => {
+    addTextField(fields, draft ? "Subtitle (OCR suggestion)" : "Subtitle", item.subtitle, value => { item.subtitle = value.trim(); });
+    addTextField(fields, draft ? "Author(s), separated by commas (OCR suggestion)" : "Author(s), separated by commas", item.authors.join(", "), value => {
       item.authors = value.split(",").map(author => author.trim()).filter(Boolean);
     });
     addTextField(fields, "Publisher", "", value => { item.publisher = value.trim(); });
@@ -284,6 +297,12 @@ async function lookupCover(file) {
     elements.coverFallback.hidden = true;
     message(outcome.message, outcome.kind);
   } catch (error) {
+    if (error.code === "cover_no_match" && error.draft) {
+      manualProvenance = "manual_after_cover_no_match";
+      showRecognizedCoverText(error.text);
+      renderManualDraft(elements.barcode.value, true, error.draft, manualProvenance);
+      return coverMessage("Readable cover text was found, but no trustworthy catalog match survived. Review the OCR suggestions below.");
+    }
     coverMessage(`Cover lookup failed: ${error.message}`, "error");
   } finally {
     elements.coverFallback.removeAttribute("aria-busy");
@@ -300,15 +319,15 @@ async function lookup() {
     renderMatches();
     message(`${matches.length} metadata match${matches.length === 1 ? "" : "es"} found.`, "success");
   } catch (error) {
-    if (error.message.startsWith("No book metadata found for ISBN")) {
-      renderManualDraft(elements.barcode.value, true);
+    if (error.code === "provider_no_match" && /^(978|979)/.test(elements.barcode.value.replace(/\D/g, ""))) {
+      renderManualDraft(elements.barcode.value, true, null, "manual_after_no_match");
       elements.coverFallback.hidden = !coverLookupAvailable;
       return message(coverLookupAvailable
         ? "No barcode match found. Scan the cover or enter the missing details below."
         : "No public book match found. Enter the missing details below.");
     }
-    if (error.message.startsWith("No product metadata found for barcode")) {
-      renderManualDraft(elements.barcode.value, false);
+    if (error.code === "provider_no_match") {
+      renderManualDraft(elements.barcode.value, false, null, "manual_after_no_match");
       return message("No public product match found. Enter the item details below.");
     }
     message(error.message, "error");

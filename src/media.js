@@ -21,7 +21,7 @@ function classifyProduct(item) {
 
 export async function lookupMedia(barcodeValue, fetchImpl = fetch, { discogsToken = "", upcItemDbApiKey = "" } = {}) {
   const barcode = normalizeBarcode(barcodeValue);
-  if (!isValidGtin(barcode)) throw new Error("Enter a valid UPC, EAN, or GTIN barcode");
+  if (!isValidGtin(barcode)) throw new OperationalError("invalid_identifier", "Enter a valid UPC, EAN, or GTIN barcode", { status: 400 });
 
   if (discogsToken) {
     const discogsUrl = new URL("https://api.discogs.com/database/search");
@@ -116,5 +116,6 @@ export async function lookupMedia(barcodeValue, fetchImpl = fetch, { discogsToke
     throw new Error(`UPCitemdb lookup failed (${upcResponse.status})`);
   }
 
-  throw new Error(`No product metadata found for barcode ${barcode}`);
+  throw new OperationalError("provider_no_match", `No product metadata found for barcode ${barcode}`, { status: 404 });
 }
+import { OperationalError } from "./operational-errors.js";

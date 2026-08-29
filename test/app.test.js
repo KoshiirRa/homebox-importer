@@ -1,6 +1,56 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../src/app.js";
+import { OperationalError } from "../src/operational-errors.js";
+
+test("classifies lookup failures and emits exactly one terminal event", async t => {
+  const lines = [];
+  const logger = { info: line => lines.push(JSON.parse(line)), error: () => {} };
+  const homebox = { status: async () => ({}), locations: async () => [] };
+  const bookLookup = async () => { throw new OperationalError("provider_no_match", "No match", { status: 404, attempts: [{ provider: "Catalog", outcome: "no_match" }] }); };
+  const server = createApp({ homebox, bookLookup, mediaLookup: bookLookup, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/books/9780306406157`);
+  const body = await response.json();
+  assert.equal(response.status, 404);
+  assert.equal(body.code, "provider_no_match");
+  assert.match(body.correlationId, /^[0-9a-f-]{36}$/);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].event, "lookup.failed");
+  assert.equal(lines[0].correlationId, body.correlationId);
+  assert.deepEqual(lines[0].providerAttempts, [{ provider: "Catalog", outcome: "no_match" }]);
+});
+
+test("classifies invalid, cover no-text, cover no-match, and unexpected failures over HTTP", async t => {
+  const events = [];
+  const logger = { info: line => events.push(JSON.parse(line)), error: () => {} };
+  const homebox = { status: async () => ({}), locations: async () => [] };
+  const bookLookup = async value => {
+    if (value === "bad") throw new OperationalError("invalid_identifier", "Invalid ISBN", { status: 400 });
+    throw new Error("internal provider defect");
+  };
+  const coverLookup = async (_image, barcode) => {
+    if (barcode === "no-text") throw new OperationalError("cover_no_text", "No readable text", { status: 404 });
+    throw new OperationalError("cover_no_match", "No trustworthy match", { status: 404, details: { text: "Readable Title", draft: { source: "ocr", title: "Readable Title", authors: [], lines: ["Readable Title"] } } });
+  };
+  const server = createApp({ homebox, bookLookup, mediaLookup: bookLookup, coverLookup, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const invalid = await fetch(`${base}/api/books/bad`);
+  assert.equal((await invalid.json()).code, "invalid_identifier");
+  const cover = barcode => fetch(`${base}/api/books/cover`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: "data:image/jpeg;base64,aA==", barcode }) });
+  assert.equal((await (await cover("no-text")).json()).code, "cover_no_text");
+  const noMatch = await (await cover("no-match")).json();
+  assert.equal(noMatch.code, "cover_no_match");
+  assert.equal(noMatch.draft.title, "Readable Title");
+  const unexpected = await fetch(`${base}/api/books/9780306406157`);
+  assert.equal((await unexpected.json()).code, "provider_unavailable");
+  assert.deepEqual(events.map(event => event.failureCode), ["invalid_identifier", "cover_no_text", "cover_no_match", "provider_unavailable"]);
+  assert.ok(events.every(event => event.event === "lookup.failed"));
+  assert.equal("identifier" in events[0], false);
+});
 
 test("serves the browser workflow through HTTP routes", async t => {
   const logLines = [];
@@ -96,6 +146,7 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(events[3].destinationId, "box-id");
   assert.equal(events[3].entityId, "book-id");
   assert.equal(events[3].assetId, "BOOK-001");
+  assert.equal(events[3].provenance, "provider_candidate");
   assert.equal(events[4].quantity, 2);
   assert.ok(events.every(event => Number.isInteger(event.durationMs) && event.durationMs >= 0));
   const serializedLogs = logLines.join("\n");

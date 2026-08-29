@@ -1,6 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lookupBookCover } from "../src/vision.js";
+import { buildCoverQueries, extractOcr, lookupBookCover, scoreCoverCandidate } from "../src/vision.js";
+
+test("extracts structured OCR words, confidence, and bounding boxes", () => {
+  const box = { vertices: [{ x: 1, y: 2 }] };
+  const ocr = extractOcr({ fullTextAnnotation: { text: "The Book\nBy Jane Doe", pages: [{ blocks: [{ paragraphs: [{ confidence: .91, boundingBox: box, words: [{ confidence: .9, symbols: [{ text: "The" }] }, { symbols: [{ text: "Book" }] }] }] }] }] } });
+  assert.equal(ocr.lines[0].text, "The Book");
+  assert.equal(ocr.lines[0].confidence, .91);
+  assert.deepEqual(ocr.lines[0].boundingBox, box);
+  assert.equal(ocr.lines[0].words[0].text, "The");
+});
+
+test("builds a bounded title and author query set", () => {
+  const queries = buildCoverQueries(extractOcr({ fullTextAnnotation: { text: "Distinctive Book Title\nBy Jane Doe\nA Novel\nPublisher Mark" } }));
+  assert.ok(queries.length <= 3);
+  assert.equal(queries[0].title, "Distinctive Book Title");
+  assert.equal(queries[0].author, "Jane Doe");
+});
+
+test("scores exact ISBNs above OCR-only candidates and penalizes conflicts", () => {
+  const query = { title: "Distinctive Book Title", author: "Jane Doe" };
+  const base = { title: "Distinctive Book Title", subtitle: "", authors: ["Jane Doe"] };
+  const exact = scoreCoverCandidate({ ...base, isbn: "9789190079249" }, query, "9789190079249");
+  const ocrOnly = scoreCoverCandidate({ ...base, isbn: "" }, query, "9789190079249");
+  const conflict = scoreCoverCandidate({ ...base, isbn: "9780306406157" }, query, "9789190079249");
+  assert.ok(exact > ocrOnly);
+  assert.ok(ocrOnly > conflict);
+});
 
 test("recognizes cover text and returns reviewable catalog candidates", async () => {
   const requests = [];

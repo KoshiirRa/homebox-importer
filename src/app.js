@@ -4,12 +4,13 @@ import { lookupBook, normalizeIsbn } from "./books.js";
 import { isValidGtin, lookupMedia, normalizeBarcode } from "./media.js";
 import { HomeboxClient } from "./homebox.js";
 import { lookupBookCover } from "./vision.js";
+import { correlationId, OperationalError, safeError } from "./operational-errors.js";
 
 function emitSuccess(logger, event) {
   logger.info(JSON.stringify({ timestamp: new Date().toISOString(), ...event }));
 }
 
-function lookupSummary({ workflow, identifier, result, startedAt }) {
+function lookupSummary({ workflow, identifier, result, startedAt, correlationId: id }) {
   const matches = Array.isArray(result) ? result : result?.matches ?? [];
   return {
     event: "lookup.succeeded",
@@ -17,8 +18,34 @@ function lookupSummary({ workflow, identifier, result, startedAt }) {
     identifier,
     provider: matches[0]?.provider || "none",
     resultCount: matches.length,
-    durationMs: Date.now() - startedAt
+    durationMs: Date.now() - startedAt,
+    correlationId: id
   };
+}
+
+function failureSummary({ workflow, identifier, error, startedAt, correlationId: id }) {
+  return {
+    event: "lookup.failed", workflow, ...(error.code !== "invalid_identifier" && identifier ? { identifier } : {}),
+    failureCode: error.code, providerAttempts: error.attempts ?? [],
+    durationMs: Date.now() - startedAt, correlationId: id
+  };
+}
+
+async function runLookup({ request, response, next, logger, workflow, identifier, operation }) {
+  const startedAt = Date.now();
+  const id = correlationId();
+  response.set("x-correlation-id", id);
+  try {
+    const result = await operation();
+    emitSuccess(logger, lookupSummary({ workflow, identifier: identifier(), result, startedAt, correlationId: id }));
+    response.json(result);
+  } catch (caught) {
+    const error = caught instanceof OperationalError ? caught : safeError(caught);
+    emitSuccess(logger, failureSummary({ workflow, identifier: identifier(), error, startedAt, correlationId: id }));
+    error.correlationId = id;
+    error.unexpected = !(caught instanceof OperationalError);
+    next(error);
+  }
 }
 
 export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = lookupMedia, coverLookup = null, logger = console } = {}) {
@@ -50,35 +77,25 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
   });
 
   app.get("/api/books/:isbn", async (request, response, next) => {
-    const startedAt = Date.now();
-    try {
-      const result = await bookLookup(request.params.isbn);
-      emitSuccess(logger, lookupSummary({ workflow: "book", identifier: normalizeIsbn(request.params.isbn), result, startedAt }));
-      response.json(result);
-    } catch (error) { next(error); }
+    await runLookup({ request, response, next, logger, workflow: "book",
+      identifier: () => normalizeIsbn(request.params.isbn), operation: () => bookLookup(request.params.isbn) });
   });
 
   app.get("/api/lookup/:barcode", async (request, response, next) => {
-    const startedAt = Date.now();
-    try {
-      const barcode = normalizeBarcode(request.params.barcode);
-      const isIsbn = /^(978|979)/.test(barcode) && isValidGtin(barcode);
-      const result = isIsbn ? await bookLookup(barcode) : await mediaLookup(barcode);
-      emitSuccess(logger, lookupSummary({ workflow: isIsbn ? "book" : "media", identifier: barcode, result, startedAt }));
-      response.json(result);
-    } catch (error) { next(error); }
+    const barcode = normalizeBarcode(request.params.barcode);
+    const isIsbn = /^(978|979)/.test(barcode) && isValidGtin(barcode);
+    await runLookup({ request, response, next, logger, workflow: isIsbn ? "book" : "media",
+      identifier: () => barcode, operation: () => isIsbn ? bookLookup(barcode) : mediaLookup(barcode) });
   });
 
   app.post("/api/books/cover", async (request, response, next) => {
-    const startedAt = Date.now();
-    try {
-      if (!coverLookup) return response.status(503).json({ error: "Cover scanning is not configured" });
-      const { image, barcode } = request.body ?? {};
-      if (!image) return response.status(400).json({ error: "Choose a book cover photo" });
-      const result = await coverLookup(image, barcode);
-      emitSuccess(logger, lookupSummary({ workflow: "cover", identifier: normalizeIsbn(barcode), result, startedAt }));
-      response.json(result);
-    } catch (error) { next(error); }
+    const { image, barcode } = request.body ?? {};
+    await runLookup({ request, response, next, logger, workflow: "cover",
+      identifier: () => normalizeIsbn(barcode), operation: async () => {
+        if (!coverLookup) throw new OperationalError("provider_unavailable", "Cover scanning is not configured", { status: 503 });
+        if (!image) throw new OperationalError("invalid_identifier", "Choose a book cover photo", { status: 400 });
+        return coverLookup(image, barcode);
+      } });
   });
 
   app.post("/api/import/books", async (request, response, next) => {
@@ -90,11 +107,11 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
       const entity = await homebox.createBook({ ...book, parentId });
       emitSuccess(logger, {
         event: "import.succeeded", workflow: "book", identifier: normalizeIsbn(book.isbn),
-        provider: book.provider || "unknown", destinationId: parentId, entityId: entity.id,
+        provider: book.provider || "unknown", provenance: book.provenance || "provider_candidate", destinationId: parentId, entityId: entity.id,
         assetId: entity.assetId || "", quantity: Number(entity.quantity ?? 1), durationMs: Date.now() - startedAt
       });
       response.status(201).json(entity);
-    } catch (error) { next(error); }
+    } catch (error) { next(new OperationalError("homebox_failure", "HomeBox could not create the book", { status: 502, cause: error })); }
   });
 
   app.post("/api/import/items", async (request, response, next) => {
@@ -106,11 +123,11 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
       const entity = await homebox.createInventoryItem({ ...item, parentId });
       emitSuccess(logger, {
         event: "import.succeeded", workflow: "media", identifier: normalizeBarcode(item.barcode),
-        provider: item.provider || "unknown", destinationId: parentId, entityId: entity.id,
+        provider: item.provider || "unknown", provenance: item.provenance || "provider_candidate", destinationId: parentId, entityId: entity.id,
         assetId: entity.assetId || "", quantity: Number(entity.quantity ?? item.quantity ?? 1), durationMs: Date.now() - startedAt
       });
       response.status(201).json(entity);
-    } catch (error) { next(error); }
+    } catch (error) { next(new OperationalError("homebox_failure", "HomeBox could not create the item", { status: 502, cause: error })); }
   });
 
   const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
@@ -118,8 +135,13 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
   app.use(express.static(publicDirectory));
   app.get("/{*path}", (_request, response) => response.sendFile(indexFile));
   app.use((error, _request, response, _next) => {
-    console.error(error);
-    response.status(502).json({ error: error.message || "Unexpected integration error" });
+    if (error.unexpected) logger.error?.(error.stack || "Unexpected lookup defect");
+    response.status(error.status || 502).json({
+      error: error.message || "Unexpected integration error",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.correlationId ? { correlationId: error.correlationId } : {}),
+      ...(error.details ? error.details : {})
+    });
   });
   return app;
 }

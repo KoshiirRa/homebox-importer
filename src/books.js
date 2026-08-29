@@ -1,4 +1,5 @@
 import { searchBraveBooks } from "./brave.js";
+import { OperationalError, providerAttempt } from "./operational-errors.js";
 
 export function normalizeIsbn(value) {
   return String(value ?? "").replace(/[^0-9X]/gi, "").toUpperCase();
@@ -52,8 +53,9 @@ async function readJson(response) {
 
 export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiKey = "", hardcoverApiToken = "", isbnDbApiKey = "", braveSearchApiKey = "" } = {}) {
   const isbn = normalizeIsbn(isbnValue);
-  if (!isValidIsbn(isbn)) throw new Error("Enter a valid ISBN-10 or ISBN-13");
+  if (!isValidIsbn(isbn)) throw new OperationalError("invalid_identifier", "Enter a valid ISBN-10 or ISBN-13", { status: 400 });
   const matches = [];
+  const attempts = [];
 
   const googleUrl = new URL("https://www.googleapis.com/books/v1/volumes");
   googleUrl.searchParams.set("q", `isbn:${isbn}`);
@@ -61,6 +63,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
   if (googleBooksApiKey) googleUrl.searchParams.set("key", googleBooksApiKey);
   const response = await fetchProvider(fetchImpl, googleUrl);
   const data = await readJson(response);
+  attempts.push(providerAttempt("Google Books", data ? ((data.items ?? []).length ? "matched" : "no_match") : "unavailable"));
   if (data) {
     matches.push(...(data.items ?? []).map(item => {
       const info = item.volumeInfo ?? {};
@@ -89,6 +92,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
   });
   const exactBookData = await readJson(exactBookResponse) ?? {};
   const exactBook = exactBookData[`ISBN:${isbn}`];
+  attempts.push(providerAttempt("Open Library", exactBook ? "matched" : "no_match"));
   if (exactBook) {
     matches.push({
       provider: "Open Library",
@@ -160,6 +164,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
       })
     });
     const hardcoverData = await readJson(hardcoverResponse);
+    attempts.push(providerAttempt("Hardcover", hardcoverData ? ((hardcoverData.data?.editions ?? []).length ? "matched" : "no_match") : "unavailable"));
     if (hardcoverData && !hardcoverData.errors?.length) {
       const hardcoverMatches = (hardcoverData.data?.editions ?? []).map(edition => ({
         provider: "Hardcover",
@@ -185,6 +190,7 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
       }
     });
     const isbnDbData = await readJson(isbnDbResponse);
+    attempts.push(providerAttempt("ISBNdb", isbnDbData ? (isbnDbData.book?.title ? "matched" : "no_match") : "unavailable"));
     if (isbnDbData) {
       const { book } = isbnDbData;
       if (book?.title) {
@@ -205,10 +211,17 @@ export async function lookupBook(isbnValue, fetchImpl = fetch, { googleBooksApiK
   }
 
   if (braveSearchApiKey && !matches.some(book => book.isbn === isbn)) {
-    matches.push(...await searchBraveBooks({ isbn }, fetchImpl, { apiKey: braveSearchApiKey }));
+    const braveMatches = await searchBraveBooks({ isbn }, fetchImpl, { apiKey: braveSearchApiKey });
+    attempts.push(providerAttempt("Brave Search", braveMatches.length ? "matched" : "no_match"));
+    matches.push(...braveMatches);
   }
 
-  if (!matches.length) throw new Error(`No book metadata found for ISBN ${isbn}`);
+  if (!matches.length) {
+    const unavailable = attempts.length && attempts.every(attempt => attempt.outcome === "unavailable");
+    throw new OperationalError(unavailable ? "provider_unavailable" : "provider_no_match", `No book metadata found for ISBN ${isbn}`, {
+      status: unavailable ? 502 : 404, attempts
+    });
+  }
   const uniqueMatches = [...new Map(matches.map(book => [
     bookDisplayTitle(book).trim().toLocaleLowerCase(),
     book
