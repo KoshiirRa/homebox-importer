@@ -1,6 +1,6 @@
 # HomeBox Importer
 
-A small mobile-first companion for importing barcode-backed media into HomeBox. It scans ISBN, UPC, EAN, and GTIN barcodes; looks up books, CDs and other music releases, movies, video games, and general products; supports editable manual entry; and creates quantity-aware items inside a selected HomeBox box or location.
+A small mobile-first companion for importing physical media into HomeBox. It scans ISBN, UPC, EAN, and GTIN barcodes; looks up books, CDs and other music releases, movies, video games, and general products; supports books without identifiers and editable manual entry; and creates quantity-aware items inside a selected HomeBox box or location.
 
 Container image: `ghcr.io/koshiirra/homebox-importer`
 
@@ -69,6 +69,14 @@ For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configur
 
 When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, and the server uses Google Cloud Vision `TEXT_DETECTION`. Structured lines, words, confidence, and bounding boxes are consumed when present, with compatibility for plain `fullTextAnnotation.text` responses. A maximum of three likely title or title-plus-author queries use Google Books `intitle:`/`inauthor:` and Open Library `title`/`author` fields in parallel. Candidates are deduplicated and scored for exact ISBN, distinctive title, author, subtitle or series, and completeness; conflicting ISBNs receive a strong penalty and are never rewritten to the scanned ISBN. Weak matches are rejected. If readable text produces no trustworthy candidate, the manual book form receives clearly labeled, editable OCR suggestions and preserves the recognized lines for review. Provider keys stay on the server and are never included in browser code. Cover photos and OCR text are processed in memory and are not stored by the importer.
 
+For pre-ISBN and other identifier-less publications, choose **Book has no ISBN
+or barcode**. You may scan the cover when Vision is configured or enter the
+book directly. ISBN is optional; edition/printing, format, and an accurately
+labeled alternate catalog identifier may be recorded instead. Catalog ISBNs
+found from cover text are shown only as candidate metadata and are not applied
+to a physical copy declared identifier-less. The importer never invents an
+ISBN or disguises another catalog number as one.
+
 ## Box labels
 
 Open `/labels.html` to select HomeBox boxes or locations and generate printable QR labels. Presets are included for the Brother QL-810WC with DK-2205 62 mm continuous media (50 mm cut length), Avery 5160 (30 per sheet), Avery 5163 (10 per sheet), and 4 × 2 inch thermal labels. Each QR code opens the importer with that destination preselected and displays its current direct contents, so you can identify what is inside before scanning additional items into it. You can also open the importer first and use **Scan container QR** to select a labeled box without leaving the page. Set the QR destination base URL to an address the phone can reach from the storage unit before printing.
@@ -104,7 +112,9 @@ the selected provider and result count; failures use `invalid_identifier`,
 and no-match outcomes do not print stack traces. Unexpected internal defects
 retain a secret-safe stack trace. Import events include provider/manual
 provenance, destination ID, resulting HomeBox entity and asset IDs, and
-quantity; HomeBox write failures use `homebox_failure`. Logs never
+quantity. Every import attempt emits exactly one `import.succeeded` or
+`import.failed` event with a correlation ID; validation and identifier conflicts
+use `invalid_identifier`, while HomeBox write failures use `homebox_failure`. Logs never
 include provider credentials, authorization headers, cover image payloads,
 descriptions, OCR text, or complete upstream response bodies.
 

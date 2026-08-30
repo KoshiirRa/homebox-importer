@@ -4,6 +4,22 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+### Added
+
+- Added a first-class identifier-less book workflow with optional cover OCR,
+  edition/printing, format, and accurately labeled alternate catalog fields.
+- Added terminal `import.failed` events with correlation IDs for validation,
+  identifier-conflict, and HomeBox write failures.
+
+### Fixed
+
+- Book candidates are now routed by explicit media type instead of the
+  presence of provider-reported ISBN metadata. A scanned ISBN remains physical
+  item evidence when a provider omits it, while conflicting provider and scan
+  identifiers block import for review.
+- Identifier-less cover searches keep catalog ISBNs informational and do not
+  apply them to a physical copy that has no ISBN.
+
 ## [0.4.0] - 2026-08-29
 
 ### Added

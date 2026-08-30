@@ -87,6 +87,7 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.match(pageHtml, /Scan it into the right box/);
   assert.match(pageHtml, /Scan container QR/);
   assert.match(pageHtml, /Scan the cover/);
+  assert.match(pageHtml, /Book has no ISBN or barcode/);
   const labelsPage = await fetch(`${base}/labels.html`);
   assert.equal(labelsPage.status, 200);
   const labelsHtml = await labelsPage.text();
@@ -107,6 +108,8 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.equal(box.items[0].quantity, 2);
   const matches = await (await fetch(`${base}/api/books/9780306406157`)).json();
   assert.equal(matches[0].title, "Test Book");
+  assert.equal(matches[0].mediaType, "Book");
+  assert.equal(matches[0].lookupIdentifier, "9780306406157");
   const mediaMatches = await (await fetch(`${base}/api/lookup/012345678905`)).json();
   assert.equal(mediaMatches[0].mediaType, "Video Game");
   const coverMatches = await (await fetch(`${base}/api/books/cover`, {
@@ -151,4 +154,101 @@ test("serves the browser workflow through HTTP routes", async t => {
   assert.ok(events.every(event => Number.isInteger(event.durationMs) && event.durationMs >= 0));
   const serializedLogs = logLines.join("\n");
   assert.doesNotMatch(serializedLogs, /data:image|aGVsbG8=|description|authorization|api.?key/i);
+});
+
+test("imports a scanned book when provider metadata omits its ISBN", async t => {
+  const logLines = [];
+  let createdBook;
+  const logger = { info: line => logLines.push(JSON.parse(line)) };
+  const homebox = {
+    createBook: async book => {
+      createdBook = book;
+      return { id: "book-id", assetId: "BOOK-008", name: book.title, quantity: 1 };
+    }
+  };
+  const bookLookup = async () => [{ provider: "Google Books", isbn: "", title: "A Scanned Book", authors: ["A. Writer"] }];
+  const server = createApp({ homebox, bookLookup, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const matches = await (await fetch(`${base}/api/lookup/9780786965595`)).json();
+  assert.equal(matches[0].mediaType, "Book");
+  assert.equal(matches[0].isbn, "");
+  assert.equal(matches[0].lookupIdentifier, "9780786965595");
+  const response = await fetch(`${base}/api/import/books`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ parentId: "box-id", book: matches[0] })
+  });
+  assert.equal(response.status, 201);
+  assert.equal(createdBook.isbn, "9780786965595");
+  assert.deepEqual(logLines.map(event => `${event.event}:${event.workflow}`), ["lookup.succeeded:book", "import.succeeded:book"]);
+  assert.equal(logLines[1].identifier, "9780786965595");
+  assert.equal(logLines[1].identifierProvenance, "scan");
+});
+
+test("blocks conflicting provider ISBNs and logs the failed import", async t => {
+  const events = [];
+  const logger = { info: line => events.push(JSON.parse(line)) };
+  const homebox = { createBook: async () => { throw new Error("must not create"); } };
+  const server = createApp({ homebox, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/import/books`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ parentId: "box-id", book: {
+      title: "Wrong Edition", mediaType: "Book", provider: "Catalog",
+      isbn: "9780306406157", lookupIdentifier: "9780786965595"
+    } })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.code, "invalid_identifier");
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event, "import.failed");
+  assert.equal(events[0].failureCode, "invalid_identifier");
+  assert.equal(events[0].correlationId, body.correlationId);
+});
+
+test("imports a manual book without any identifier", async t => {
+  const events = [];
+  let createdBook;
+  const logger = { info: line => events.push(JSON.parse(line)) };
+  const homebox = { createBook: async book => {
+    createdBook = book;
+    return { id: "book-id", assetId: "BOOK-009", name: book.title, quantity: 1 };
+  } };
+  const server = createApp({ homebox, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/import/books`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ parentId: "box-id", book: {
+      title: "Character Options", mediaType: "Book", provider: "Manual entry", provenance: "manual_without_identifier",
+      authors: ["Rob Boyle"], publisher: "Posthuman Studios", format: "Wirebound",
+      alternateIdentifierType: "DriveThruRPG Product", alternateIdentifier: "461118"
+    } })
+  });
+  assert.equal(response.status, 201);
+  assert.equal(createdBook.isbn, "");
+  assert.equal(events[0].event, "import.succeeded");
+  assert.equal("identifier" in events[0], false);
+  assert.equal(events[0].identifierProvenance, "none");
+  assert.equal(events[0].provenance, "manual_without_identifier");
+});
+
+test("identifier-less cover lookup keeps catalog ISBN informational only", async t => {
+  const logger = { info: () => {} };
+  const coverLookup = async () => ({ text: "Old Book", matches: [{ provider: "Catalog", isbn: "9780306406157", title: "Old Book" }] });
+  const server = createApp({ homebox: {}, coverLookup, logger }).listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  t.after(() => server.close());
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/books/cover`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ image: "data:image/jpeg;base64,aA==", identifierless: true })
+  });
+  const result = await response.json();
+  assert.equal(result.matches[0].mediaType, "Book");
+  assert.equal(result.matches[0].isbn, "");
+  assert.equal(result.matches[0].lookupIdentifier, "");
+  assert.equal(result.matches[0].catalogCandidateIsbn, "9780306406157");
 });

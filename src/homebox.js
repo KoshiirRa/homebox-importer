@@ -111,7 +111,7 @@ export class HomeboxClient {
     return preferred?.id ?? null;
   }
 
-  async createBook({ title, subtitle = "", authors = [], description = "", isbn, publisher = "", publishedDate = "", parentId, coverUrl = "" }) {
+  async createBook({ title, subtitle = "", authors = [], description = "", isbn = "", publisher = "", publishedDate = "", edition = "", format = "", alternateIdentifierType = "", alternateIdentifier = "", parentId, coverUrl = "" }) {
     const normalizedTitle = title.trim();
     const normalizedSubtitle = subtitle.trim();
     const inventoryTitle = normalizedSubtitle && !normalizedTitle.toLocaleLowerCase().includes(normalizedSubtitle.toLocaleLowerCase())
@@ -128,11 +128,19 @@ export class HomeboxClient {
       parentId,
       imageUrl: coverUrl,
       mediaType: "Book",
-      identifierName: "ISBN"
+      identifierName: "ISBN",
+      extraFields: [
+        edition ? { name: "Edition or Printing", type: "text", textValue: edition } : null,
+        format ? { name: "Format", type: "text", textValue: format } : null,
+        alternateIdentifier ? {
+          name: "Other Identifier", type: "text",
+          textValue: alternateIdentifierType ? `${alternateIdentifierType}: ${alternateIdentifier}` : alternateIdentifier
+        } : null
+      ].filter(Boolean)
     });
   }
 
-  async createInventoryItem({ title, creators = [], description = "", barcode, manufacturer = "", modelNumber = "", releaseDate = "", parentId, imageUrl = "", mediaType = "Item", quantity = 1, identifierName = "Barcode" }) {
+  async createInventoryItem({ title, creators = [], description = "", barcode = "", manufacturer = "", modelNumber = "", releaseDate = "", parentId, imageUrl = "", mediaType = "Item", quantity = 1, identifierName = "Barcode", extraFields = [] }) {
     const entityTypeId = await this.defaultItemTypeId();
     const resolvedQuantity = Math.max(1, Number.parseInt(quantity, 10) || 1);
     const created = await this.request("/v1/entities", {
@@ -161,14 +169,15 @@ export class HomeboxClient {
       quantity: resolvedQuantity,
       assetId: created.assetId || "",
       manufacturer,
-      modelNumber: modelNumber || barcode,
+      ...(modelNumber || barcode ? { modelNumber: modelNumber || barcode } : {}),
       notes,
-      serialNumber: barcode,
+      ...(barcode ? { serialNumber: barcode } : {}),
       tagIds: created.tags?.map(tag => tag.id) ?? [],
       fields: [
-        { name: identifierName, type: "text", textValue: barcode },
+        ...(barcode ? [{ name: identifierName, type: "text", textValue: barcode }] : []),
         { name: "Creators", type: "text", textValue: creators.join(", ") },
-        { name: "Media Type", type: "text", textValue: mediaType }
+        { name: "Media Type", type: "text", textValue: mediaType },
+        ...extraFields
       ]
     };
     const resolvedTypeId = entityTypeId || created.entityType?.id;

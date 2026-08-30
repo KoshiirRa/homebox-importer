@@ -1,10 +1,11 @@
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { isBookCandidate } from "./candidate.js";
 import { canScanCoverInstead, coverOutcome, metadataSource } from "./cover-status.js";
 
 const elements = {
   status: document.querySelector("#status"), location: document.querySelector("#location"),
   barcode: document.querySelector("#isbn"), lookup: document.querySelector("#lookup"),
-  scanContainer: document.querySelector("#scan-container"), scan: document.querySelector("#scan"), stop: document.querySelector("#stop"),
+  scanContainer: document.querySelector("#scan-container"), scan: document.querySelector("#scan"), noIsbn: document.querySelector("#no-isbn"), stop: document.querySelector("#stop"),
   video: document.querySelector("#scanner-video"), results: document.querySelector("#results"),
   message: document.querySelector("#message"), boxView: document.querySelector("#box-view"),
   coverFallback: document.querySelector("#cover-fallback"), coverPhoto: document.querySelector("#cover-photo"),
@@ -15,6 +16,7 @@ let scannerControls;
 let matches = [];
 let coverLookupAvailable = false;
 let manualProvenance = "manual_after_no_match";
+let identifierlessBook = false;
 
 function destinationFromQr(value) {
   try {
@@ -64,6 +66,7 @@ function renderLocations(locations) {
 }
 
 function scanCoverInstead() {
+  identifierlessBook = false;
   manualProvenance = "manual_after_rejected_candidate";
   renderManualDraft(elements.barcode.value, true, null, manualProvenance);
   elements.coverFallback.hidden = false;
@@ -78,7 +81,7 @@ function renderMatches() {
   matches.forEach((item, index) => {
     const imageUrl = item.coverUrl || item.imageUrl;
     const creators = item.authors || item.creators || [];
-    const identifier = item.isbn || item.barcode;
+    const identifier = item.isbn || item.lookupIdentifier || item.barcode;
     const card = document.createElement("article");
     card.className = "book-card";
     const image = imageUrl ? document.createElement("img") : document.createElement("div");
@@ -98,6 +101,7 @@ function renderMatches() {
     const metadata = document.createElement("p");
     metadata.className = "details";
     metadata.textContent = [item.mediaType || "Book", item.publisher || item.manufacturer, item.publishedDate || item.releaseDate, identifier].filter(Boolean).join(" · ");
+    if (item.catalogCandidateIsbn) metadata.textContent += ` · Catalog candidate ISBN ${item.catalogCandidateIsbn} (not applied)`;
     const source = document.createElement("p");
     source.className = "metadata-source";
     source.textContent = metadataSource(item.provider);
@@ -186,9 +190,12 @@ function addTextField(container, labelText, value, onInput, required = false) {
 }
 
 function renderManualDraft(barcode, isBook = false, draft = null, provenance = "manual_after_no_match") {
+  const normalizedBookIdentifier = String(barcode).replace(/[^0-9X]/gi, "").toUpperCase();
   const item = isBook ? {
-    provider: "Manual entry", providerId: barcode, isbn: String(barcode).replace(/[^0-9X]/gi, "").toUpperCase(),
-    title: draft?.title ?? "", subtitle: draft?.subtitle ?? "", authors: draft?.authors ?? [], publisher: "", publishedDate: "", description: "", coverUrl: "", provenance
+    provider: "Manual entry", providerId: barcode, mediaType: "Book", isbn: normalizedBookIdentifier,
+    lookupIdentifier: normalizedBookIdentifier, title: draft?.title ?? "", subtitle: draft?.subtitle ?? "", authors: draft?.authors ?? [],
+    publisher: "", publishedDate: "", edition: "", format: "", alternateIdentifierType: "", alternateIdentifier: "",
+    description: "", coverUrl: "", provenance
   } : {
     provider: "Manual entry", providerId: barcode, barcode: String(barcode).replace(/\D/g, ""),
     title: "", mediaType: "Item", creators: [], manufacturer: "", modelNumber: "", releaseDate: "",
@@ -219,6 +226,10 @@ function renderManualDraft(barcode, isBook = false, draft = null, provenance = "
     });
     addTextField(fields, "Publisher", "", value => { item.publisher = value.trim(); });
     addTextField(fields, "Published date or year", "", value => { item.publishedDate = value.trim(); });
+    addTextField(fields, "Edition or printing", "", value => { item.edition = value.trim(); });
+    addTextField(fields, "Format", "", value => { item.format = value.trim(); });
+    addTextField(fields, "Other identifier type (optional)", "", value => { item.alternateIdentifierType = value.trim(); });
+    addTextField(fields, "Other identifier value (optional)", "", value => { item.alternateIdentifier = value.trim(); });
   } else {
     const typeLabel = document.createElement("label");
     typeLabel.textContent = "Item type";
@@ -286,7 +297,7 @@ async function lookupCover(file) {
     const result = await jsonRequest("/api/books/cover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image, barcode: elements.barcode.value })
+      body: JSON.stringify({ image, barcode: elements.barcode.value, identifierless: identifierlessBook })
     });
     const outcome = coverOutcome(result);
     coverMessage(outcome.message, outcome.kind);
@@ -312,6 +323,7 @@ async function lookupCover(file) {
 }
 
 async function lookup() {
+  identifierlessBook = false;
   elements.coverFallback.hidden = true;
   message("Looking up barcode…");
   try {
@@ -337,7 +349,7 @@ async function lookup() {
 async function importMatch(index) {
   if (!elements.location.value) return message("Select a destination box first.", "error");
   const item = matches[index];
-  const isBook = Boolean(item.isbn);
+  const isBook = isBookCandidate(item);
   message(`Adding ${isBook ? "book" : item.mediaType?.toLowerCase() || "item"} to HomeBox…`);
   try {
     const entity = await jsonRequest(isBook ? "/api/import/books" : "/api/import/items", {
@@ -351,6 +363,19 @@ async function importMatch(index) {
     matches = [];
     renderMatches();
   } catch (error) { message(error.message, "error"); }
+}
+
+function startIdentifierlessBook() {
+  stopScanner();
+  identifierlessBook = true;
+  elements.barcode.value = "";
+  renderManualDraft("", true, null, "manual_without_identifier");
+  elements.coverFallback.hidden = !coverLookupAvailable;
+  showRecognizedCoverText();
+  if (coverLookupAvailable) coverMessage("Choose or take a clear cover photo, or complete the manual book details below.");
+  message(coverLookupAvailable
+    ? "Add the book manually or scan its cover. No ISBN will be invented or applied."
+    : "Enter the book details. ISBN is optional for this workflow.");
 }
 
 function selectScannedContainer(value) {
@@ -406,6 +431,7 @@ function stopScanner() {
 elements.lookup.addEventListener("click", lookup);
 elements.scanContainer.addEventListener("click", () => startScanner("container"));
 elements.scan.addEventListener("click", () => startScanner("item"));
+elements.noIsbn.addEventListener("click", startIdentifierlessBook);
 elements.stop.addEventListener("click", stopScanner);
 elements.coverPhoto.addEventListener("change", () => lookupCover(elements.coverPhoto.files[0]));
 elements.barcode.addEventListener("keydown", event => { if (event.key === "Enter") lookup(); });

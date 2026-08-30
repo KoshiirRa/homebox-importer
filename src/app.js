@@ -31,6 +31,48 @@ function failureSummary({ workflow, identifier, error, startedAt, correlationId:
   };
 }
 
+function asBookCandidates(result, lookupIdentifier = "", identifierless = false) {
+  const decorate = item => ({
+    ...item,
+    mediaType: "Book",
+    lookupIdentifier: identifierless ? "" : normalizeIsbn(lookupIdentifier),
+    ...(identifierless && item.isbn ? { catalogCandidateIsbn: item.isbn, isbn: "" } : {})
+  });
+  if (Array.isArray(result)) return result.map(decorate);
+  return { ...result, matches: (result.matches ?? []).map(decorate) };
+}
+
+function importFailureSummary({ workflow, identifier, provider, provenance, details = {}, error, startedAt, correlationId: id }) {
+  return {
+    event: "import.failed", workflow, ...(identifier ? { identifier } : {}),
+    provider: provider || "unknown", provenance: provenance || "unknown",
+    ...details, failureCode: error.code || "homebox_failure", durationMs: Date.now() - startedAt, correlationId: id
+  };
+}
+
+async function runImport({ response, next, logger, workflow, identifier, provider, provenance, details = () => ({}), operation }) {
+  const startedAt = Date.now();
+  const id = correlationId();
+  response.set("x-correlation-id", id);
+  try {
+    const entity = await operation();
+    emitSuccess(logger, {
+      event: "import.succeeded", workflow, ...(identifier() ? { identifier: identifier() } : {}),
+      provider: provider(), provenance: provenance(), ...details(), destinationId: entity.destinationId,
+      entityId: entity.id, assetId: entity.assetId || "", quantity: Number(entity.quantity ?? 1),
+      durationMs: Date.now() - startedAt, correlationId: id
+    });
+    response.status(201).json(entity);
+  } catch (caught) {
+    const error = caught instanceof OperationalError ? caught : new OperationalError(
+      "homebox_failure", `HomeBox could not create the ${workflow === "book" ? "book" : "item"}`, { status: 502, cause: caught }
+    );
+    emitSuccess(logger, importFailureSummary({ workflow, identifier: identifier(), provider: provider(), provenance: provenance(), details: details(), error, startedAt, correlationId: id }));
+    error.correlationId = id;
+    next(error);
+  }
+}
+
 async function runLookup({ request, response, next, logger, workflow, identifier, operation }) {
   const startedAt = Date.now();
   const id = correlationId();
@@ -78,56 +120,55 @@ export function createApp({ homebox, bookLookup = lookupBook, mediaLookup = look
 
   app.get("/api/books/:isbn", async (request, response, next) => {
     await runLookup({ request, response, next, logger, workflow: "book",
-      identifier: () => normalizeIsbn(request.params.isbn), operation: () => bookLookup(request.params.isbn) });
+      identifier: () => normalizeIsbn(request.params.isbn), operation: async () => asBookCandidates(await bookLookup(request.params.isbn), request.params.isbn) });
   });
 
   app.get("/api/lookup/:barcode", async (request, response, next) => {
     const barcode = normalizeBarcode(request.params.barcode);
     const isIsbn = /^(978|979)/.test(barcode) && isValidGtin(barcode);
     await runLookup({ request, response, next, logger, workflow: isIsbn ? "book" : "media",
-      identifier: () => barcode, operation: () => isIsbn ? bookLookup(barcode) : mediaLookup(barcode) });
+      identifier: () => barcode, operation: async () => isIsbn ? asBookCandidates(await bookLookup(barcode), barcode) : mediaLookup(barcode) });
   });
 
   app.post("/api/books/cover", async (request, response, next) => {
-    const { image, barcode } = request.body ?? {};
+    const { image, barcode, identifierless = false } = request.body ?? {};
     await runLookup({ request, response, next, logger, workflow: "cover",
       identifier: () => normalizeIsbn(barcode), operation: async () => {
         if (!coverLookup) throw new OperationalError("provider_unavailable", "Cover scanning is not configured", { status: 503 });
         if (!image) throw new OperationalError("invalid_identifier", "Choose a book cover photo", { status: 400 });
-        return coverLookup(image, barcode);
+        return asBookCandidates(await coverLookup(image, barcode), barcode, Boolean(identifierless));
       } });
   });
 
   app.post("/api/import/books", async (request, response, next) => {
-    const startedAt = Date.now();
-    try {
-      const { book, parentId } = request.body ?? {};
-      if (!book?.title || !book?.isbn) return response.status(400).json({ error: "Book title and ISBN are required" });
-      if (!parentId) return response.status(400).json({ error: "Select a destination box or location" });
-      const entity = await homebox.createBook({ ...book, parentId });
-      emitSuccess(logger, {
-        event: "import.succeeded", workflow: "book", identifier: normalizeIsbn(book.isbn),
-        provider: book.provider || "unknown", provenance: book.provenance || "provider_candidate", destinationId: parentId, entityId: entity.id,
-        assetId: entity.assetId || "", quantity: Number(entity.quantity ?? 1), durationMs: Date.now() - startedAt
-      });
-      response.status(201).json(entity);
-    } catch (error) { next(new OperationalError("homebox_failure", "HomeBox could not create the book", { status: 502, cause: error })); }
+    const { book, parentId } = request.body ?? {};
+    const providerIsbn = normalizeIsbn(book?.isbn);
+    const scannedIsbn = normalizeIsbn(book?.lookupIdentifier);
+    const identifier = () => providerIsbn || scannedIsbn;
+    await runImport({ response, next, logger, workflow: "book", identifier,
+      provider: () => book?.provider || "unknown", provenance: () => book?.provenance || "provider_candidate",
+      details: () => ({ identifierProvenance: providerIsbn ? "provider" : scannedIsbn ? "scan" : "none" }),
+      operation: async () => {
+        if (!book?.title?.trim()) throw new OperationalError("invalid_identifier", "Book title is required", { status: 400 });
+        if (!parentId) throw new OperationalError("invalid_identifier", "Select a destination box or location", { status: 400 });
+        if (providerIsbn && scannedIsbn && providerIsbn !== scannedIsbn) {
+          throw new OperationalError("invalid_identifier", "The provider ISBN conflicts with the scanned ISBN; review another match or use manual entry", { status: 409 });
+        }
+        const entity = await homebox.createBook({ ...book, isbn: identifier(), parentId });
+        return { ...entity, destinationId: parentId };
+      } });
   });
 
   app.post("/api/import/items", async (request, response, next) => {
-    const startedAt = Date.now();
-    try {
-      const { item, parentId } = request.body ?? {};
-      if (!item?.title || !item?.barcode) return response.status(400).json({ error: "Item title and barcode are required" });
-      if (!parentId) return response.status(400).json({ error: "Select a destination box or location" });
-      const entity = await homebox.createInventoryItem({ ...item, parentId });
-      emitSuccess(logger, {
-        event: "import.succeeded", workflow: "media", identifier: normalizeBarcode(item.barcode),
-        provider: item.provider || "unknown", provenance: item.provenance || "provider_candidate", destinationId: parentId, entityId: entity.id,
-        assetId: entity.assetId || "", quantity: Number(entity.quantity ?? item.quantity ?? 1), durationMs: Date.now() - startedAt
-      });
-      response.status(201).json(entity);
-    } catch (error) { next(new OperationalError("homebox_failure", "HomeBox could not create the item", { status: 502, cause: error })); }
+    const { item, parentId } = request.body ?? {};
+    await runImport({ response, next, logger, workflow: "media", identifier: () => normalizeBarcode(item?.barcode),
+      provider: () => item?.provider || "unknown", provenance: () => item?.provenance || "provider_candidate",
+      operation: async () => {
+        if (!item?.title || !item?.barcode) throw new OperationalError("invalid_identifier", "Item title and barcode are required", { status: 400 });
+        if (!parentId) throw new OperationalError("invalid_identifier", "Select a destination box or location", { status: 400 });
+        const entity = await homebox.createInventoryItem({ ...item, parentId });
+        return { ...entity, destinationId: parentId };
+      } });
   });
 
   const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));

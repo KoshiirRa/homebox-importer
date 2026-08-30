@@ -42,6 +42,31 @@ test("includes provider subtitles in the HomeBox inventory name", async () => {
   assert.equal(JSON.parse(calls[1].options.body).name, "Pathfinder Adventure Path: The Six-Legend Soul");
 });
 
+test("creates identifier-less books without empty HomeBox identifier fields", async () => {
+  const calls = [];
+  const fakeFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/v1/entity-types")) return Response.json([{ id: "item-type", name: "Item", isLocation: false }]);
+    if (url.endsWith("/api/v1/entities") && options.method === "POST") return Response.json({ id: "new-id", name: "Multiplicity & Synthesis", tags: [] }, { status: 201 });
+    if (url.endsWith("/api/v1/entities/new-id") && options.method === "PUT") return Response.json({ id: "new-id", name: "Multiplicity & Synthesis" });
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  await client.createBook({
+    title: "Multiplicity & Synthesis", authors: ["Rob Boyle", "Talia Dean"], publisher: "Posthuman Studios",
+    publishedDate: "2022", edition: "Second Edition", format: "Softcover",
+    alternateIdentifierType: "DriveThruRPG Product", alternateIdentifier: "410252", parentId: "box-id"
+  });
+  const update = JSON.parse(calls[2].options.body);
+  assert.equal("serialNumber" in update, false);
+  assert.equal("modelNumber" in update, false);
+  assert.equal(update.fields.some(field => field.name === "ISBN"), false);
+  assert.equal(update.fields.find(field => field.name === "Media Type").textValue, "Book");
+  assert.equal(update.fields.find(field => field.name === "Edition or Printing").textValue, "Second Edition");
+  assert.equal(update.fields.find(field => field.name === "Format").textValue, "Softcover");
+  assert.equal(update.fields.find(field => field.name === "Other Identifier").textValue, "DriveThruRPG Product: 410252");
+});
+
 test("supports a clean HomeBox instance without a non-location entity type", async () => {
   const calls = [];
   const fakeFetch = async (url, options = {}) => {
