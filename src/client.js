@@ -189,7 +189,7 @@ function addTextField(container, labelText, value, onInput, required = false) {
   return input;
 }
 
-function renderManualDraft(barcode, isBook = false, draft = null, provenance = "manual_after_no_match") {
+function renderManualDraft(barcode, isBook = false, draft = null, provenance = "manual_after_no_match", { append = false, focus = true } = {}) {
   const normalizedBookIdentifier = String(barcode).replace(/[^0-9X]/gi, "").toUpperCase();
   const item = isBook ? {
     provider: "Manual entry", providerId: barcode, mediaType: "Book", isbn: normalizedBookIdentifier,
@@ -201,8 +201,10 @@ function renderManualDraft(barcode, isBook = false, draft = null, provenance = "
     title: "", mediaType: "Item", creators: [], manufacturer: "", modelNumber: "", releaseDate: "",
     description: "", imageUrl: "", quantity: 1, provenance
   };
-  matches = [item];
-  elements.results.replaceChildren();
+  if (append) matches.push(item);
+  else matches = [item];
+  const matchIndex = append ? matches.length - 1 : 0;
+  if (!append) elements.results.replaceChildren();
   const card = document.createElement("article");
   card.className = "book-card manual-card";
   const placeholder = document.createElement("div");
@@ -262,12 +264,12 @@ function renderManualDraft(barcode, isBook = false, draft = null, provenance = "
       titleInput.focus();
       return message(`Enter the ${isBook ? "book" : "item"} title before adding it.`, "error");
     }
-    importMatch(0);
+    importMatch(matchIndex);
   });
   fields.append(button);
   card.append(placeholder, fields);
   elements.results.append(card);
-  titleInput.focus();
+  if (focus) titleInput.focus();
 }
 
 async function coverDataUrl(file) {
@@ -307,6 +309,10 @@ async function lookupCover(file) {
     if (!result.matches.length) return;
     matches = result.matches;
     renderMatches();
+    if (result.draft?.source === "gemini") {
+      manualProvenance = "manual_after_cover_candidates";
+      renderManualDraft(elements.barcode.value, true, result.draft, manualProvenance, { append: true, focus: false });
+    }
     elements.coverFallback.hidden = true;
     message(outcome.message, outcome.kind);
   } catch (error) {

@@ -122,6 +122,33 @@ test("uses Gemini title boundaries and metadata when Vision is not configured", 
   );
 });
 
+test("rejects unrelated catalog candidates that only overlap the Gemini title", async () => {
+  const fakeFetch = async url => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("generativelanguage.googleapis.com")) {
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        title: "Character Options", subtitle: "", authors: ["Rob Boyle"],
+        publisher: "Posthuman Studios", publishedDate: "2023", edition: "Second Edition", format: "Sourcebook", series: "Eclipse Phase",
+        confidence: { title: .99, subtitle: 0, authors: .95, publisher: .95, publishedDate: .9, edition: .99, format: .9, series: .99 }
+      }) }] } }] });
+    }
+    if (requestUrl.includes("googleapis.com/books")) return Response.json({ items: [{ id: "numenera", volumeInfo: {
+      title: "Numenera Character Options", authors: ["Monte Cook"], publisher: "Monte Cook Games"
+    } }, { id: "gatecrashing", volumeInfo: {
+      title: "Eclipse Phase Gatecrashing", authors: ["Rob Boyle"], publisher: "Sandstorm Productions"
+    } }] });
+    if (requestUrl.includes("openlibrary.org")) return Response.json({ docs: [{ key: "/works/numenera", title: "Numenera Character Options", publisher: ["Monte Cook Games"] }] });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  await assert.rejects(
+    () => lookupBookCover("data:image/jpeg;base64,aGVsbG8=", "", fakeFetch, { geminiApiKey: "gemini-key" }),
+    error => error.code === "cover_no_match"
+      && error.details?.draft?.source === "gemini"
+      && error.details.draft.title === "Character Options"
+  );
+});
+
 test("falls back to a Vision draft when Gemini is unavailable", async () => {
   const fakeFetch = async url => {
     const requestUrl = String(url);

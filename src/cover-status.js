@@ -4,7 +4,9 @@ export function coverOutcome(result = {}) {
 
   if (matchCount) {
     return {
-      message: `${matchCount} possible cover match${matchCount === 1 ? "" : "es"} found. Review before adding.`,
+      message: result.draft?.source === "gemini"
+        ? `AI-assisted cover metadata and ${matchCount} possible catalog match${matchCount === 1 ? "" : "es"} found. Review every value before adding.`
+        : `${matchCount} possible cover match${matchCount === 1 ? "" : "es"} found. Review before adding.`,
       kind: "success",
       text
     };

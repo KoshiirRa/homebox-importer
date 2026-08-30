@@ -82,6 +82,23 @@ export function scoreCoverCandidate(candidate, query, scannedIsbn = "") {
   return (exact ? 1000 : 0) + titleSimilarity(query.title, `${candidate.title} ${candidate.subtitle}`) * 100 + overlap(query.author, (candidate.authors ?? []).join(" ")) * 35 + titleSimilarity(query.title, candidate.subtitle ?? "") * 15 + completeness * 2 - (conflict ? 30 : 0);
 }
 
+function agreesWithGemini(candidate, metadata) {
+  if (!metadata?.title) return true;
+  const candidateTitle = `${candidate.title} ${candidate.subtitle}`;
+  const titleAgreement = titleSimilarity(metadata.title, candidateTitle);
+  if (titleAgreement < .8) return false;
+
+  const expectedAuthors = metadata.authors ?? [];
+  const candidateAuthors = candidate.authors ?? [];
+  const hasAuthorEvidence = expectedAuthors.length && candidateAuthors.length;
+  if (hasAuthorEvidence && overlap(expectedAuthors.join(" "), candidateAuthors.join(" ")) === 0) return false;
+
+  const hasPublisherEvidence = metadata.publisher && candidate.publisher;
+  if (hasPublisherEvidence && overlap(metadata.publisher, candidate.publisher) === 0) return false;
+
+  return hasAuthorEvidence || hasPublisherEvidence || titleAgreement >= .95;
+}
+
 function googleMatch(item) {
   const info = item.volumeInfo ?? {};
   const isbn = (info.industryIdentifiers ?? []).map(value => normalizeIsbn(value.identifier)).find(isValidIsbn) ?? "";
@@ -163,9 +180,15 @@ export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKe
     ...results.flatMap(result => result.candidates.map(candidate => ({ candidate, query: result.query, score: scoreCoverCandidate(candidate, result.query, isbn) })))
   ].sort((a, b) => b.score - a.score);
   const unique = [...new Map(ranked.map(entry => [`${entry.candidate.isbn}|${entry.candidate.title}|${entry.candidate.authors.join(",")}`.toLowerCase(), entry])).values()];
-  const matches = unique.filter(entry => {
+  const geminiQuery = gemini.metadata ? geminiQueries(gemini.metadata)[0] : null;
+  const rescored = unique.map(entry => {
+    const query = geminiQuery ?? entry.query;
+    return { ...entry, query, score: scoreCoverCandidate(entry.candidate, query, isbn) };
+  }).sort((a, b) => b.score - a.score);
+  const matches = rescored.filter(entry => {
     const exactIsbn = Boolean(isbn && normalizeIsbn(entry.candidate.isbn) === isbn);
-    return (exactIsbn || titleSimilarity(entry.query.title, `${entry.candidate.title} ${entry.candidate.subtitle}`) >= .7) && entry.score >= 65;
+    return (exactIsbn || (titleSimilarity(entry.query.title, `${entry.candidate.title} ${entry.candidate.subtitle}`) >= .7
+      && agreesWithGemini(entry.candidate, gemini.metadata))) && entry.score >= 65;
   }).map(entry => ({ ...entry.candidate, matchScore: Math.round(entry.score) })).slice(0, 8);
   const draft = manualDraft(ocr, queries, gemini.metadata);
   if (!matches.length) throw new OperationalError("cover_no_match", "No trustworthy catalog match was found", { status: 404, attempts, details: { text: ocr.text, lines: ocr.lines, draft } });
