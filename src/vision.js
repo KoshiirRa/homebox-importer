@@ -1,16 +1,17 @@
 import { isValidIsbn, normalizeIsbn } from "./books.js";
 import { OperationalError, providerAttempt } from "./operational-errors.js";
 import { searchBraveBooks } from "./brave.js";
+import { extractGeminiBookMetadata } from "./gemini.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_QUERIES = 3;
 const RESULTS_PER_QUERY = 5;
 
 function imageContent(value) {
-  const match = String(value ?? "").match(/^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  const match = String(value ?? "").match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new OperationalError("invalid_identifier", "Choose a JPEG, PNG, or WebP cover photo", { status: 400 });
-  if (Math.ceil(match[1].length * 3 / 4) > MAX_IMAGE_BYTES) throw new OperationalError("invalid_identifier", "Cover photo must be smaller than 4 MB", { status: 400 });
-  return match[1];
+  if (Math.ceil(match[2].length * 3 / 4) > MAX_IMAGE_BYTES) throw new OperationalError("invalid_identifier", "Cover photo must be smaller than 4 MB", { status: 400 });
+  return { mimeType: match[1], content: match[2] };
 }
 
 function wordsFromParagraph(paragraph) {
@@ -94,20 +95,55 @@ function openLibraryMatch(book) {
 
 async function responseJson(response) { if (!response?.ok) return null; try { return await response.json(); } catch { return null; } }
 async function safeFetch(fetchImpl, ...args) { try { return await fetchImpl(...args); } catch { return null; } }
-function manualDraft(ocr, queries) { return { source: "ocr", title: queries[0]?.title ?? ocr.lines[0]?.text ?? "", subtitle: "", authors: queries[0]?.author ? [queries[0].author] : [], lines: ocr.lines.map(line => line.text).slice(0, 12) }; }
+function geminiQueries(metadata) {
+  if (!metadata?.title) return [];
+  return [{ title: metadata.title, author: metadata.authors?.[0] ?? "" }];
+}
 
-export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "", braveSearchApiKey = "" } = {}) {
-  if (!apiKey) throw new OperationalError("provider_unavailable", "Cover scanning is not configured", { status: 503 });
-  const content = imageContent(image);
-  const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify({ requests: [{ image: { content }, features: [{ type: "TEXT_DETECTION", maxResults: 1 }] }] }) });
-  const visionData = await responseJson(visionResponse);
-  const annotation = visionData?.responses?.[0];
-  if (!visionData || annotation?.error) throw new OperationalError("provider_unavailable", "Cover text recognition failed", { status: 502, attempts: [providerAttempt("Google Cloud Vision", "unavailable")] });
-  const ocr = extractOcr(annotation);
-  const queries = buildCoverQueries(ocr);
-  if (!queries.length) throw new OperationalError("cover_no_text", "No readable cover text was found", { status: 404, attempts: [providerAttempt("Google Cloud Vision", "no_text")] });
+function mergeQueries(...sets) {
+  const unique = new Map();
+  for (const query of sets.flat()) {
+    const key = `${query.title}|${query.author}`.toLowerCase();
+    if (query.title && !unique.has(key)) unique.set(key, query);
+  }
+  return [...unique.values()].slice(0, MAX_QUERIES);
+}
+
+function manualDraft(ocr, queries, metadata) {
+  return {
+    source: metadata ? "gemini" : "ocr",
+    title: metadata?.title ?? queries[0]?.title ?? ocr.lines[0]?.text ?? "",
+    subtitle: metadata?.subtitle ?? "",
+    authors: metadata?.authors?.length ? metadata.authors : queries[0]?.author ? [queries[0].author] : [],
+    publisher: metadata?.publisher ?? "",
+    publishedDate: metadata?.publishedDate ?? "",
+    edition: metadata?.edition ?? "",
+    format: metadata?.format ?? "",
+    series: metadata?.series ?? "",
+    confidence: metadata?.confidence ?? null,
+    lines: ocr.lines.map(line => line.text).slice(0, 12)
+  };
+}
+
+export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKey = "", googleBooksApiKey = "", braveSearchApiKey = "", geminiApiKey = "", geminiModel = "" } = {}) {
+  if (!apiKey && !geminiApiKey) throw new OperationalError("provider_unavailable", "Cover scanning is not configured", { status: 503 });
+  const { content, mimeType } = imageContent(image);
+  const attempts = [];
+  let ocr = { text: "", lines: [] };
+  if (apiKey) {
+    const visionResponse = await safeFetch(fetchImpl, "https://vision.googleapis.com/v1/images:annotate", { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify({ requests: [{ image: { content }, features: [{ type: "TEXT_DETECTION", maxResults: 1 }] }] }) });
+    const visionData = await responseJson(visionResponse);
+    const annotation = visionData?.responses?.[0];
+    if (visionData && !annotation?.error) {
+      ocr = extractOcr(annotation);
+      attempts.push(providerAttempt("Google Cloud Vision", ocr.lines.length ? "matched" : "no_text"));
+    } else attempts.push(providerAttempt("Google Cloud Vision", "unavailable"));
+  }
+  const gemini = await extractGeminiBookMetadata(content, fetchImpl, { apiKey: geminiApiKey, model: geminiModel, mimeType });
+  if (gemini.attempt) attempts.push(gemini.attempt);
+  const queries = mergeQueries(geminiQueries(gemini.metadata), buildCoverQueries(ocr));
+  if (!queries.length) throw new OperationalError("cover_no_text", "No readable cover text was found", { status: 404, attempts });
   const isbn = isValidIsbn(barcode) ? normalizeIsbn(barcode) : "";
-  const attempts = [providerAttempt("Google Cloud Vision", "matched")];
   const calls = queries.flatMap(query => {
     const google = new URL("https://www.googleapis.com/books/v1/volumes");
     google.searchParams.set("q", `intitle:${query.title}${query.author ? ` inauthor:${query.author}` : ""}`);
@@ -131,7 +167,7 @@ export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKe
     const exactIsbn = Boolean(isbn && normalizeIsbn(entry.candidate.isbn) === isbn);
     return (exactIsbn || titleSimilarity(entry.query.title, `${entry.candidate.title} ${entry.candidate.subtitle}`) >= .7) && entry.score >= 65;
   }).map(entry => ({ ...entry.candidate, matchScore: Math.round(entry.score) })).slice(0, 8);
-  const draft = manualDraft(ocr, queries);
+  const draft = manualDraft(ocr, queries, gemini.metadata);
   if (!matches.length) throw new OperationalError("cover_no_match", "No trustworthy catalog match was found", { status: 404, attempts, details: { text: ocr.text, lines: ocr.lines, draft } });
   return { text: ocr.text, lines: ocr.lines, draft, matches };
 }

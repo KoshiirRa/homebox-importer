@@ -20,7 +20,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - General media providers: optional Discogs, MusicBrainz, then UPCitemdb
 - Box labels: printable QR labels deep-linking to a preselected HomeBox destination and current contents view, including QL-810WC/DK-2205 continuous-roll support
 - Barcode scanning: ZXing in the browser
-- Optional book-cover fallback: Google Cloud Vision OCR followed by Google Books and Open Library candidate search
+- Optional book-cover fallback: Google Cloud Vision OCR and/or schema-constrained Gemini extraction followed by deterministic Google Books and Open Library candidate search
 
 ## Architecture Rules
 

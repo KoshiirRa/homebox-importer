@@ -4,6 +4,20 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+### Added
+
+- Added optional, server-side Gemini cover extraction with schema-constrained,
+  validated metadata suggestions and a configurable `GEMINI_MODEL` defaulting
+  to `gemini-2.5-flash`.
+- Added Gemini-only cover scanning plus safe fallback between Gemini, Google
+  Cloud Vision OCR, catalog matching, and editable manual entry.
+
+### Security
+
+- The Gemini schema excludes ISBNs, barcodes, catalog numbers, descriptions,
+  and synopses. Model output remains an editable suggestion and cannot bypass
+  deterministic catalog matching or the user's explicit import action.
+
 ## [0.4.2] - 2026-08-30
 
 ### Fixed

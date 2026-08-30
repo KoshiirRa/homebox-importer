@@ -202,11 +202,13 @@ export function createConfiguredApp(env = process.env) {
     discogsToken: env.DISCOGS_TOKEN,
     upcItemDbApiKey: env.UPCITEMDB_API_KEY
   });
-  const coverLookup = env.GOOGLE_CLOUD_VISION_API_KEY
+  const coverLookup = env.GOOGLE_CLOUD_VISION_API_KEY || env.GEMINI_API_KEY
     ? (image, barcode) => lookupBookCover(image, barcode, fetch, {
       apiKey: env.GOOGLE_CLOUD_VISION_API_KEY,
       googleBooksApiKey: env.GOOGLE_BOOKS_API_KEY,
-      braveSearchApiKey: env.BRAVE_SEARCH_API_KEY
+      braveSearchApiKey: env.BRAVE_SEARCH_API_KEY,
+      geminiApiKey: env.GEMINI_API_KEY,
+      geminiModel: env.GEMINI_MODEL
     })
     : null;
   return createApp({ homebox, bookLookup, mediaLookup, coverLookup });

@@ -21,6 +21,8 @@ release history and upgrade notes.
 | `DISCOGS_TOKEN` | no | none | Optional personal Discogs API token for physical music releases |
 | `UPCITEMDB_API_KEY` | no | none | Optional paid UPCitemdb key; without it the 100-request/day trial endpoint is used |
 | `GOOGLE_CLOUD_VISION_API_KEY` | no | none | Enables book-cover OCR after barcode metadata providers fail |
+| `GEMINI_API_KEY` | no | none | Enables structured, AI-assisted book-cover metadata extraction |
+| `GEMINI_MODEL` | no | `gemini-2.5-flash` | Gemini model used for cover extraction |
 | `PORT` | no | `8080` | Importer listening port |
 
 Do not use a personal login token. In HomeBox, create a dedicated API key for the importer and inject it as a Docker secret or protected environment value.
@@ -55,6 +57,8 @@ Add this service to the same Compose project as HomeBox:
       DISCOGS_TOKEN: ${DISCOGS_TOKEN:-}
       UPCITEMDB_API_KEY: ${UPCITEMDB_API_KEY:-}
       GOOGLE_CLOUD_VISION_API_KEY: ${GOOGLE_CLOUD_VISION_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
     depends_on:
       - homebox
     ports:
@@ -67,10 +71,16 @@ The `HOMEBOX_IMPORTER_API_KEY` value belongs in a protected `.env` file or secre
 
 For non-book barcodes, lookup order is Discogs (when `DISCOGS_TOKEN` is configured), MusicBrainz, UPCitemdb, and editable manual entry. Discogs is used for release-specific music metadata; MusicBrainz is the credential-free music fallback; UPCitemdb covers movies, video games, and general retail products. UPCitemdb's unauthenticated trial is limited to 100 requests per day.
 
-When `GOOGLE_CLOUD_VISION_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes the photo before sending it to the importer server, and the server uses Google Cloud Vision `TEXT_DETECTION`. Structured lines, words, confidence, and bounding boxes are consumed when present, with compatibility for plain `fullTextAnnotation.text` responses. A maximum of three likely title or title-plus-author queries use Google Books `intitle:`/`inauthor:` and Open Library `title`/`author` fields in parallel. Candidates are deduplicated and scored for exact ISBN, distinctive title, author, subtitle or series, and completeness; conflicting ISBNs receive a strong penalty and are never rewritten to the scanned ISBN. Weak matches are rejected. If readable text produces no trustworthy candidate, the manual book form receives clearly labeled, editable OCR suggestions and preserves the recognized lines for review. Provider keys stay on the server and are never included in browser code. Cover photos and OCR text are processed in memory and are not stored by the importer.
+When `GOOGLE_CLOUD_VISION_API_KEY` or `GEMINI_API_KEY` is configured, a failed ISBN metadata lookup also offers **Scan the cover**. The browser resizes and JPEG-compresses the photo before sending it to the importer server. Google Cloud Vision uses `TEXT_DETECTION` for conventional OCR. Optional Gemini extraction separates the visible work title from series, edition, format, marketing text, and publisher marks, and returns schema-constrained title, subtitle, author, publisher, date, edition, format, series, and confidence fields. `GEMINI_MODEL` defaults to the stable `gemini-2.5-flash` model but remains configurable.
+
+Gemini suggestions are bounded, validated, and treated as untrusted input. The schema deliberately contains no ISBN, barcode, catalog-number, synopsis, or description field, so a model assertion cannot become identifier evidence. A maximum of three likely title or title-plus-author queries use Google Books `intitle:`/`inauthor:` and Open Library `title`/`author` fields in parallel. Candidates are deduplicated and scored deterministically for exact provider ISBN, distinctive title, author, subtitle or series, and completeness. Academic and non-academic books use the same evidence rules. Conflicting ISBNs receive a strong penalty and are never rewritten to the scanned ISBN; weak matches are rejected.
+
+If Gemini is unavailable, invalid, or rate limited, configured Vision OCR continues normally. If Vision is unavailable but Gemini returns trustworthy structured fields, cover lookup can still continue. If neither produces a trustworthy catalog match, the manual book form receives clearly labeled, editable cover suggestions. User review and the **Add book** action remain mandatory; the importer never imports directly from model output.
+
+Provider keys stay on the server and are never included in browser code or request URLs. Cover photos, OCR text, prompts, model responses, and complete upstream bodies are processed transiently and are not stored or logged by the importer. Gemini API quotas, pricing, and data-use terms belong to the Google API project associated with the key and may differ between free and paid tiers; verify the current terms for that project before production use. A Gemini or Google AI consumer subscription should not be treated as unlimited API quota.
 
 For pre-ISBN and other identifier-less publications, choose **Book has no ISBN
-or barcode**. You may scan the cover when Vision is configured or enter the
+or barcode**. You may scan the cover when Vision or Gemini is configured or enter the
 book directly. ISBN is optional; edition/printing, format, and an accurately
 labeled alternate catalog identifier may be recorded instead. Catalog ISBNs
 found from cover text are shown only as candidate metadata and are not applied

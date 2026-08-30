@@ -194,7 +194,7 @@ function renderManualDraft(barcode, isBook = false, draft = null, provenance = "
   const item = isBook ? {
     provider: "Manual entry", providerId: barcode, mediaType: "Book", isbn: normalizedBookIdentifier,
     lookupIdentifier: normalizedBookIdentifier, title: draft?.title ?? "", subtitle: draft?.subtitle ?? "", authors: draft?.authors ?? [],
-    publisher: "", publishedDate: "", edition: "", format: "", alternateIdentifierType: "", alternateIdentifier: "",
+    publisher: draft?.publisher ?? "", publishedDate: draft?.publishedDate ?? "", edition: draft?.edition ?? "", format: draft?.format ?? "", alternateIdentifierType: "", alternateIdentifier: "",
     description: "", coverUrl: "", provenance
   } : {
     provider: "Manual entry", providerId: barcode, barcode: String(barcode).replace(/\D/g, ""),
@@ -215,19 +215,21 @@ function renderManualDraft(barcode, isBook = false, draft = null, provenance = "
   if (draft) {
     const suggestion = document.createElement("p");
     suggestion.className = "field-help";
-    suggestion.textContent = "Suggested from cover OCR. Review and edit every value before importing.";
+    suggestion.textContent = draft.source === "gemini"
+      ? "AI-assisted suggestions from the cover. Review and edit every value before importing."
+      : "Suggested from cover OCR. Review and edit every value before importing.";
     fields.append(suggestion);
   }
-  const titleInput = addTextField(fields, draft ? "Title (OCR suggestion)" : "Title", item.title, value => { item.title = value.trim(); }, true);
+  const titleInput = addTextField(fields, draft ? "Title (cover suggestion)" : "Title", item.title, value => { item.title = value.trim(); }, true);
   if (isBook) {
-    addTextField(fields, draft ? "Subtitle (OCR suggestion)" : "Subtitle", item.subtitle, value => { item.subtitle = value.trim(); });
-    addTextField(fields, draft ? "Author(s), separated by commas (OCR suggestion)" : "Author(s), separated by commas", item.authors.join(", "), value => {
+    addTextField(fields, draft ? "Subtitle (cover suggestion)" : "Subtitle", item.subtitle, value => { item.subtitle = value.trim(); });
+    addTextField(fields, draft ? "Author(s), separated by commas (cover suggestion)" : "Author(s), separated by commas", item.authors.join(", "), value => {
       item.authors = value.split(",").map(author => author.trim()).filter(Boolean);
     });
-    addTextField(fields, "Publisher", "", value => { item.publisher = value.trim(); });
-    addTextField(fields, "Published date or year", "", value => { item.publishedDate = value.trim(); });
-    addTextField(fields, "Edition or printing", "", value => { item.edition = value.trim(); });
-    addTextField(fields, "Format", "", value => { item.format = value.trim(); });
+    addTextField(fields, draft?.publisher ? "Publisher (cover suggestion)" : "Publisher", item.publisher, value => { item.publisher = value.trim(); });
+    addTextField(fields, draft?.publishedDate ? "Published date or year (cover suggestion)" : "Published date or year", item.publishedDate, value => { item.publishedDate = value.trim(); });
+    addTextField(fields, draft?.edition ? "Edition or printing (cover suggestion)" : "Edition or printing", item.edition, value => { item.edition = value.trim(); });
+    addTextField(fields, draft?.format ? "Format (cover suggestion)" : "Format", item.format, value => { item.format = value.trim(); });
     addTextField(fields, "Other identifier type (optional)", "", value => { item.alternateIdentifierType = value.trim(); });
     addTextField(fields, "Other identifier value (optional)", "", value => { item.alternateIdentifier = value.trim(); });
   } else {
@@ -312,7 +314,9 @@ async function lookupCover(file) {
       manualProvenance = "manual_after_cover_no_match";
       showRecognizedCoverText(error.text);
       renderManualDraft(elements.barcode.value, true, error.draft, manualProvenance);
-      return coverMessage("Readable cover text was found, but no trustworthy catalog match survived. Review the OCR suggestions below.");
+      return coverMessage(error.draft.source === "gemini"
+        ? "AI-assisted cover metadata was extracted, but no trustworthy catalog match survived. Review the suggestions below."
+        : "Readable cover text was found, but no trustworthy catalog match survived. Review the OCR suggestions below.");
     }
     coverMessage(`Cover lookup failed: ${error.message}`, "error");
   } finally {

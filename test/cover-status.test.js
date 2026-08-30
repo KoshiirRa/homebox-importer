@@ -21,6 +21,12 @@ test("cover outcome reports singular and plural matches", () => {
   assert.match(coverOutcome({ text: "Book", matches: [{}, {}] }).message, /2 possible cover matches found/);
 });
 
+test("cover outcome accepts Gemini-only matches without raw OCR text", () => {
+  const outcome = coverOutcome({ text: "", draft: { source: "gemini", title: "Example Book" }, matches: [{ title: "Example Book" }] });
+  assert.equal(outcome.kind, "success");
+  assert.match(outcome.message, /1 possible cover match/);
+});
+
 test("metadata source labels identify the provider", () => {
   assert.equal(metadataSource("Open Library"), "Metadata source: Open Library");
   assert.equal(metadataSource(""), "Metadata source unavailable");

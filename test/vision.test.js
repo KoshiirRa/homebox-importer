@@ -98,6 +98,48 @@ test("recognizes cover text and returns reviewable catalog candidates", async ()
   assert.equal(new URL(googleBooksRequest.url).searchParams.get("key"), "test-google-books-key");
 });
 
+test("uses Gemini title boundaries and metadata when Vision is not configured", async () => {
+  const fakeFetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("generativelanguage.googleapis.com")) {
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        title: "Multiplicity & Synthesis", subtitle: "", authors: ["Rob Boyle", "Talia Dean"],
+        publisher: "Posthuman Studios", publishedDate: "2022", edition: "Second Edition", format: "Sourcebook", series: "Eclipse Phase",
+        confidence: { title: .99, subtitle: 0, authors: .95, publisher: .95, publishedDate: .7, edition: .99, format: .9, series: .99 }
+      }) }] } }] });
+    }
+    if (requestUrl.includes("googleapis.com/books")) return Response.json({ items: [] });
+    if (requestUrl.includes("openlibrary.org")) return Response.json({ docs: [] });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  await assert.rejects(
+    () => lookupBookCover("data:image/png;base64,aGVsbG8=", "", fakeFetch, { geminiApiKey: "gemini-key" }),
+    error => error.code === "cover_no_match"
+      && error.details?.draft?.source === "gemini"
+      && error.details.draft.title === "Multiplicity & Synthesis"
+      && error.details.draft.publisher === "Posthuman Studios"
+      && error.attempts.some(attempt => attempt.provider === "Gemini cover extraction" && attempt.outcome === "matched")
+  );
+});
+
+test("falls back to a Vision draft when Gemini is unavailable", async () => {
+  const fakeFetch = async url => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("vision.googleapis.com")) return Response.json({ responses: [{ fullTextAnnotation: { text: "Example Book\nTest Author" } }] });
+    if (requestUrl.includes("generativelanguage.googleapis.com")) return new Response("rate limited", { status: 429 });
+    if (requestUrl.includes("googleapis.com/books")) return Response.json({ items: [{ id: "book", volumeInfo: { title: "Example Book", authors: ["Test Author"] } }] });
+    if (requestUrl.includes("openlibrary.org")) return Response.json({ docs: [] });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  await assert.rejects(
+    () => lookupBookCover("data:image/jpeg;base64,aGVsbG8=", "", fakeFetch, { apiKey: "vision-key", geminiApiKey: "gemini-key" }),
+    error => error.code === "cover_no_match"
+      && error.details?.draft?.source === "ocr"
+      && error.details.draft.title === "Example Book"
+      && error.attempts.some(attempt => attempt.provider === "Gemini cover extraction" && attempt.outcome === "unavailable")
+  );
+});
+
 test("rejects loose catalog matches and uses an exact-ISBN Brave result", async () => {
   const fakeFetch = async url => {
     const requestUrl = String(url);
