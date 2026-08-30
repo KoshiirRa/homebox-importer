@@ -4,12 +4,21 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.2] - 2026-08-30
+
 ### Fixed
 
 - Tightened cover-title matching so long unrelated catalog titles cannot pass
   merely by containing one or two generic OCR words. Single-word cover queries
   now require an exact one-word catalog title, while exact scanned ISBN evidence
   still takes precedence.
+
+### Verification
+
+- The production build and all 53 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
 
 ## [0.4.1] - 2026-08-30
 
@@ -167,6 +176,7 @@ All notable changes to HomeBox Importer are documented here.
   `linux/amd64` and `linux/arm64` container image.
 
 [0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
+[0.4.2]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.2
 [0.4.1]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.1
 [0.4.0]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.0
 [0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
