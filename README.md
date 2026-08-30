@@ -92,13 +92,13 @@ docker compose pull homebox-importer
 docker compose up -d homebox-importer
 ```
 
-For repeatable production deployments, replace `latest` with a published version such as `0.4.0` after validating that release.
+For repeatable production deployments, replace `latest` with a published version such as `0.4.1` after validating that release.
 
 ## Published tags
 
 - `latest`: most recent successful build from `main`
-- `0.4.0` and `0.4`: semantic-version container tags created from Git tag `v0.4.0`
-- `v0.4.0`: source Git tag and container tag
+- `0.4.1` and `0.4`: semantic-version container tags created from Git tag `v0.4.1`
+- `v0.4.1`: source Git tag and container tag
 - `sha-…`: immutable commit build
 
 ## Operational logs

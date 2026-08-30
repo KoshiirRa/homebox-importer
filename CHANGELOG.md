@@ -4,6 +4,8 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.1] - 2026-08-30
+
 ### Added
 
 - Added a first-class identifier-less book workflow with optional cover OCR,
@@ -19,6 +21,13 @@ All notable changes to HomeBox Importer are documented here.
   identifiers block import for review.
 - Identifier-less cover searches keep catalog ISBNs informational and do not
   apply them to a physical copy that has no ISBN.
+
+### Verification
+
+- The production build and all 50 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
 
 ## [0.4.0] - 2026-08-29
 
@@ -151,6 +160,7 @@ All notable changes to HomeBox Importer are documented here.
   `linux/amd64` and `linux/arm64` container image.
 
 [0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
+[0.4.1]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.1
 [0.4.0]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.0
 [0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
 [0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
