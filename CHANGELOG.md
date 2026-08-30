@@ -4,6 +4,13 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Tightened cover-title matching so long unrelated catalog titles cannot pass
+  merely by containing one or two generic OCR words. Single-word cover queries
+  now require an exact one-word catalog title, while exact scanned ISBN evidence
+  still takes precedence.
+
 ## [0.4.1] - 2026-08-30
 
 ### Added

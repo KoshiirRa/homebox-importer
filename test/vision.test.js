@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverQueries, extractOcr, lookupBookCover, scoreCoverCandidate } from "../src/vision.js";
+import { buildCoverQueries, extractOcr, lookupBookCover, scoreCoverCandidate, titleSimilarity } from "../src/vision.js";
 
 test("extracts structured OCR words, confidence, and bounding boxes", () => {
   const box = { vertices: [{ x: 1, y: 2 }] };
@@ -18,6 +18,14 @@ test("builds a bounded title and author query set", () => {
   assert.equal(queries[0].author, "Jane Doe");
 });
 
+test("treats edition and publisher lines as context and joins split title fragments", () => {
+  const queries = buildCoverQueries(extractOcr({ fullTextAnnotation: {
+    text: "ECLIPSE PHASE SECOND EDITION\nMultiplicity\n& Synthesis\nAN ECLIPSE PHASE SOURCEBOOK\nPOSTHUMAN STUDIOS"
+  } }));
+  assert.equal(queries[0].title, "Multiplicity & Synthesis");
+  assert.equal(queries.some(query => /edition|sourcebook|studios/i.test(query.title)), false);
+});
+
 test("scores exact ISBNs above OCR-only candidates and penalizes conflicts", () => {
   const query = { title: "Distinctive Book Title", author: "Jane Doe" };
   const base = { title: "Distinctive Book Title", subtitle: "", authors: ["Jane Doe"] };
@@ -26,6 +34,35 @@ test("scores exact ISBNs above OCR-only candidates and penalizes conflicts", () 
   const conflict = scoreCoverCandidate({ ...base, isbn: "9780306406157" }, query, "9789190079249");
   assert.ok(exact > ocrOnly);
   assert.ok(ocrOnly > conflict);
+});
+
+test("title similarity rejects long academic titles sharing only generic OCR words", () => {
+  assert.ok(titleSimilarity("Multiplicity & Synthesis", "Eclipse Phase: Multiplicity & Synthesis") >= .7);
+  assert.ok(titleSimilarity("Multiplicity & Synthesis", "Oxo Synthesis in an Isothermal Gas-liquid CSTR: Steady-state Multiplicity and Stability") < .7);
+  assert.equal(titleSimilarity("Multiplicity", "Effect of Multiplicity of Infection on M-RNA Synthesis"), 0);
+});
+
+test("rejects the live Multiplicity and Synthesis academic false positives", async () => {
+  const academicItems = [
+    "Oxo Synthesis in an Isothermal Gas-liquid CSTR: Steady-state Multiplicity and Stability",
+    "Effect of Multiplicity of Infection on M-RNA Synthesis in Escherichia Coli Cells Infected by Bacteriophage Lambda",
+    "The Negative Effect of Multiplicity of Infection on the Synthesis of Endolysin in Bacteriophage [lambda]-Infected Escherichia Coli Cells",
+    "Synthesis of the Feynman-Y Neutron Multiplicity Metric Using Deterministic Transport"
+  ].map((title, index) => ({ id: `academic-${index}`, volumeInfo: { title, authors: ["Research Author"], publishedDate: "1980" } }));
+  const fakeFetch = async url => {
+    const requestUrl = String(url);
+    if (requestUrl.includes("vision.googleapis.com")) {
+      return Response.json({ responses: [{ fullTextAnnotation: { text: "ECLIPSE PHASE SECOND EDITION\nMultiplicity & Synthesis\nAN ECLIPSE PHASE SOURCEBOOK\nPOSTHUMAN STUDIOS" } }] });
+    }
+    if (requestUrl.includes("googleapis.com/books")) return Response.json({ items: academicItems });
+    if (requestUrl.includes("openlibrary.org")) return Response.json({ docs: [] });
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  await assert.rejects(
+    () => lookupBookCover("data:image/jpeg;base64,aGVsbG8=", "", fakeFetch, { apiKey: "vision-key" }),
+    error => error.code === "cover_no_match" && error.details?.draft?.title === "Multiplicity & Synthesis"
+  );
 });
 
 test("recognizes cover text and returns reviewable catalog candidates", async () => {

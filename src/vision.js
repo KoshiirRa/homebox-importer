@@ -31,7 +31,22 @@ export function extractOcr(annotation = {}) {
 
 export function buildCoverQueries(ocr) {
   const lines = ocr.lines.filter(line => line.text.length >= 2 && line.text.length <= 100 && /[A-Za-z]/.test(line.text)).slice(0, 10);
-  const ranked = [...lines].sort((a, b) => (b.confidence ?? .5) - (a.confidence ?? .5) || b.text.length - a.text.length);
+  const contextPattern = /\b(?:edition|sourcebook|publisher|publishing|studios|press)\b/i;
+  const markedContext = lines.filter(line => contextPattern.test(line.text)).map(line => line.text.toLowerCase());
+  const isContext = line => contextPattern.test(line.text) || (line.text.split(/\s+/).length >= 2 && markedContext.some(text => text !== line.text.toLowerCase() && text.includes(line.text.toLowerCase())));
+  const titleLines = lines.filter(line => !isContext(line));
+  const fragments = [];
+  for (let index = 0; index < titleLines.length - 1; index += 1) {
+    const first = titleLines[index]; const second = titleLines[index + 1];
+    if (/^(?:&|and\b|or\b|of\b|the\b)/i.test(second.text) || /[:\-–—]$/.test(first.text)) {
+      fragments.push({
+        text: `${first.text} ${second.text}`.replace(/\s+/g, " ").trim(),
+        confidence: Math.min(first.confidence ?? .5, second.confidence ?? .5)
+      });
+    }
+  }
+  const ranked = [...fragments, ...(titleLines.length ? titleLines : lines)]
+    .sort((a, b) => (b.confidence ?? .5) - (a.confidence ?? .5) || b.text.length - a.text.length);
   const title = ranked[0]?.text ?? "";
   const author = ranked.slice(1).find(line => /\b(?:by|author)\b/i.test(line.text))?.text.replace(/^.*?\b(?:by|author)\b\s*/i, "") || ranked.slice(1, 4).find(line => line.text.split(/\s+/).length <= 5)?.text || "";
   const queries = title ? [{ title, author }] : [];
@@ -48,12 +63,22 @@ function overlap(left, right) {
   return a.size && b.size ? [...a].filter(token => b.has(token)).length / Math.min(a.size, b.size) : 0;
 }
 
+export function titleSimilarity(left, right) {
+  const expected = tokens(left); const candidate = tokens(right);
+  if (!expected.size || !candidate.size) return 0;
+  const shared = [...expected].filter(token => candidate.has(token)).length;
+  if (expected.size === 1) return shared === 1 && candidate.size === 1 ? 1 : 0;
+  const expectedCoverage = shared / expected.size;
+  const dice = (2 * shared) / (expected.size + candidate.size);
+  return dice * .85 + expectedCoverage * .15;
+}
+
 export function scoreCoverCandidate(candidate, query, scannedIsbn = "") {
   const reported = normalizeIsbn(candidate.isbn);
   const exact = Boolean(scannedIsbn && reported === scannedIsbn);
   const conflict = Boolean(scannedIsbn && reported && reported !== scannedIsbn);
   const completeness = [candidate.authors?.length, candidate.publisher, candidate.publishedDate, candidate.coverUrl].filter(Boolean).length;
-  return (exact ? 1000 : 0) + overlap(query.title, `${candidate.title} ${candidate.subtitle}`) * 100 + overlap(query.author, (candidate.authors ?? []).join(" ")) * 35 + overlap(query.title, candidate.subtitle ?? "") * 15 + completeness * 2 - (conflict ? 30 : 0);
+  return (exact ? 1000 : 0) + titleSimilarity(query.title, `${candidate.title} ${candidate.subtitle}`) * 100 + overlap(query.author, (candidate.authors ?? []).join(" ")) * 35 + titleSimilarity(query.title, candidate.subtitle ?? "") * 15 + completeness * 2 - (conflict ? 30 : 0);
 }
 
 function googleMatch(item) {
@@ -98,11 +123,14 @@ export async function lookupBookCover(image, barcode, fetchImpl = fetch, { apiKe
   const braveMatches = braveSearchApiKey ? await searchBraveBooks({ isbn, text: queries[0].title }, fetchImpl, { apiKey: braveSearchApiKey }) : [];
   if (braveSearchApiKey) attempts.push(providerAttempt("Brave Search", braveMatches.length ? "matched" : "no_match"));
   const ranked = [
-    ...braveMatches.map(candidate => ({ candidate, score: scoreCoverCandidate(candidate, queries[0], isbn) })),
-    ...results.flatMap(result => result.candidates.map(candidate => ({ candidate, score: scoreCoverCandidate(candidate, result.query, isbn) })))
+    ...braveMatches.map(candidate => ({ candidate, query: queries[0], score: scoreCoverCandidate(candidate, queries[0], isbn) })),
+    ...results.flatMap(result => result.candidates.map(candidate => ({ candidate, query: result.query, score: scoreCoverCandidate(candidate, result.query, isbn) })))
   ].sort((a, b) => b.score - a.score);
   const unique = [...new Map(ranked.map(entry => [`${entry.candidate.isbn}|${entry.candidate.title}|${entry.candidate.authors.join(",")}`.toLowerCase(), entry])).values()];
-  const matches = unique.filter(entry => entry.score >= 65).map(entry => ({ ...entry.candidate, matchScore: Math.round(entry.score) })).slice(0, 8);
+  const matches = unique.filter(entry => {
+    const exactIsbn = Boolean(isbn && normalizeIsbn(entry.candidate.isbn) === isbn);
+    return (exactIsbn || titleSimilarity(entry.query.title, `${entry.candidate.title} ${entry.candidate.subtitle}`) >= .7) && entry.score >= 65;
+  }).map(entry => ({ ...entry.candidate, matchScore: Math.round(entry.score) })).slice(0, 8);
   const draft = manualDraft(ocr, queries);
   if (!matches.length) throw new OperationalError("cover_no_match", "No trustworthy catalog match was found", { status: 404, attempts, details: { text: ocr.text, lines: ocr.lines, draft } });
   return { text: ocr.text, lines: ocr.lines, draft, matches };
