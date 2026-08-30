@@ -4,6 +4,8 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.3] - 2026-08-30
+
 ### Added
 
 - Added optional, server-side Gemini cover extraction with schema-constrained,
@@ -17,6 +19,13 @@ All notable changes to HomeBox Importer are documented here.
 - The Gemini schema excludes ISBNs, barcodes, catalog numbers, descriptions,
   and synopses. Model output remains an editable suggestion and cannot bypass
   deterministic catalog matching or the user's explicit import action.
+
+### Verification
+
+- The production build and all 60 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
 
 ## [0.4.2] - 2026-08-30
 
@@ -190,6 +199,7 @@ All notable changes to HomeBox Importer are documented here.
   `linux/amd64` and `linux/arm64` container image.
 
 [0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
+[0.4.3]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.3
 [0.4.2]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.2
 [0.4.1]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.1
 [0.4.0]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.0
