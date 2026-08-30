@@ -4,6 +4,26 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.4] - 2026-08-30
+
+### Fixed
+
+- Preserved validated Gemini cover suggestions as an editable, visibly
+  AI-assisted option even when catalog candidates are also returned.
+- Rescored catalog candidates against Gemini's title and author metadata and
+  rejected candidates that conflict with available author or publisher
+  evidence. This prevents unrelated records such as Numenera Character Options
+  from displacing Eclipse Phase Second Edition: Character Options.
+- Distinguished AI-extracted metadata from catalog-confirmed editions in the
+  cover-scan result message while retaining explicit review before import.
+
+### Verification
+
+- The production build and all 62 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.4.3] - 2026-08-30
 
 ### Added
