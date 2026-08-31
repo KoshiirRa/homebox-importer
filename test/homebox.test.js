@@ -1,6 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { HomeboxClient } from "../src/homebox.js";
+import { HomeboxClient, truncateUtf8 } from "../src/homebox.js";
+
+test("bounds HomeBox descriptions by UTF-8 bytes without splitting characters", () => {
+  assert.equal(truncateUtf8("Short description"), "Short description");
+  const accented = truncateUtf8("é".repeat(600));
+  assert.equal(accented, "é".repeat(500));
+  assert.equal(Buffer.byteLength(accented, "utf8"), 1000);
+  const emojiBoundary = truncateUtf8(`${"a".repeat(999)}😀`);
+  assert.equal(emojiBoundary, "a".repeat(999));
+  assert.equal(emojiBoundary.includes("�"), false);
+});
+
+test("uses the same bounded provider description for create and update", async () => {
+  const calls = [];
+  const fakeFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/v1/entity-types")) return Response.json([]);
+    if (url.endsWith("/api/v1/entities") && options.method === "POST") return Response.json({ id: "new-id", name: "A Book", tags: [] }, { status: 201 });
+    if (url.endsWith("/api/v1/entities/new-id") && options.method === "PUT") return Response.json({ id: "new-id" });
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  await client.createBook({ title: "A Book", description: "é".repeat(600), parentId: "box-id" });
+  const createDescription = JSON.parse(calls[1].options.body).description;
+  const updateDescription = JSON.parse(calls[2].options.body).description;
+  assert.equal(Buffer.byteLength(createDescription, "utf8"), 1000);
+  assert.equal(updateDescription, createDescription);
+});
 
 test("sends bearer authentication and creates then enriches a book", async () => {
   const calls = [];

@@ -1,4 +1,20 @@
 const trimTrailingSlash = value => value.replace(/\/+$/, "");
+const HOMEBOX_DESCRIPTION_BYTES = 1000;
+
+export function truncateUtf8(value, maxBytes = HOMEBOX_DESCRIPTION_BYTES) {
+  const text = String(value ?? "");
+  const encoder = new TextEncoder();
+  if (encoder.encode(text).byteLength <= maxBytes) return text;
+  let result = "";
+  let byteLength = 0;
+  for (const character of text) {
+    const characterBytes = encoder.encode(character).byteLength;
+    if (byteLength + characterBytes > maxBytes) break;
+    result += character;
+    byteLength += characterBytes;
+  }
+  return result;
+}
 
 export class HomeboxClient {
   constructor({ baseUrl, apiKey, fetchImpl = fetch }) {
@@ -143,11 +159,12 @@ export class HomeboxClient {
   async createInventoryItem({ title, creators = [], description = "", barcode = "", manufacturer = "", modelNumber = "", releaseDate = "", parentId, imageUrl = "", mediaType = "Item", quantity = 1, identifierName = "Barcode", extraFields = [] }) {
     const entityTypeId = await this.defaultItemTypeId();
     const resolvedQuantity = Math.max(1, Number.parseInt(quantity, 10) || 1);
+    const boundedDescription = truncateUtf8(description);
     const created = await this.request("/v1/entities", {
       method: "POST",
       body: JSON.stringify({
         name: title,
-        description: description.slice(0, 1000),
+        description: boundedDescription,
         parentId: parentId || null,
         quantity: resolvedQuantity,
         ...(entityTypeId ? { entityTypeId } : {})
@@ -164,7 +181,7 @@ export class HomeboxClient {
     const update = {
       id: created.id,
       name: title,
-      description: description.slice(0, 1000),
+      description: boundedDescription,
       parentId: parentId || null,
       quantity: resolvedQuantity,
       assetId: created.assetId || "",
