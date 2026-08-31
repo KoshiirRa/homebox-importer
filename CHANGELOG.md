@@ -4,6 +4,23 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.5] - 2026-08-30
+
+### Fixed
+
+- Bounded descriptions sent to HomeBox by UTF-8 byte length rather than
+  JavaScript UTF-16 units, preventing multibyte provider text from exceeding
+  HomeBox's 1,000-byte entity-description validator.
+- Applied the same Unicode-safe bounded description to both entity creation and
+  enrichment without splitting surrogate pairs or changing shorter text.
+
+### Verification
+
+- The production build and all 64 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.4.4] - 2026-08-30
 
 ### Fixed
