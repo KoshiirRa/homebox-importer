@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canScanCoverInstead, coverOutcome, metadataSource } from "../src/cover-status.js";
+import { canScanCoverInstead, coverFallbackIdentifier, coverOutcome, metadataSource } from "../src/cover-status.js";
 
 test("cover outcome distinguishes unreadable photos", () => {
   const outcome = coverOutcome({ text: "", matches: [] });
@@ -38,9 +38,15 @@ test("metadata source labels identify the provider", () => {
   assert.equal(metadataSource(""), "Metadata source unavailable");
 });
 
-test("cover alternative is offered only for provider-backed book matches", () => {
+test("cover alternative is offered for provider-backed book and UPCitemdb matches", () => {
   assert.equal(canScanCoverInstead({ isbn: "9798987122006", provider: "Open Library" }, true), true);
   assert.equal(canScanCoverInstead({ isbn: "9798987122006", provider: "Manual entry" }, true), false);
-  assert.equal(canScanCoverInstead({ barcode: "012345678905", provider: "UPCitemdb" }, true), false);
+  assert.equal(canScanCoverInstead({ barcode: "071831002501", provider: "UPCitemdb" }, true), true);
   assert.equal(canScanCoverInstead({ isbn: "9798987122006", provider: "Open Library" }, false), false);
+  assert.equal(canScanCoverInstead({ barcode: "071831002501", provider: "UPCitemdb" }, false), false);
+});
+
+test("UPCitemdb cover pivots do not treat the scanned UPC as an ISBN", () => {
+  assert.equal(coverFallbackIdentifier({ barcode: "071831002501", provider: "UPCitemdb" }, "071831002501"), "");
+  assert.equal(coverFallbackIdentifier({ isbn: "9780425062456", provider: "Google Books" }, "9780425062456"), "9780425062456");
 });

@@ -40,5 +40,11 @@ export function metadataSource(provider) {
 }
 
 export function canScanCoverInstead(item, coverLookupAvailable) {
-  return Boolean(coverLookupAvailable && item?.isbn && item?.provider !== "Manual entry");
+  return Boolean(coverLookupAvailable
+    && item?.provider !== "Manual entry"
+    && (item?.isbn || item?.provider === "UPCitemdb"));
+}
+
+export function coverFallbackIdentifier(item, scannedIdentifier) {
+  return item?.provider === "UPCitemdb" ? "" : String(scannedIdentifier ?? "");
 }

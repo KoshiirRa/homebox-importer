@@ -4,6 +4,24 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.4.6] - 2026-08-30
+
+### Fixed
+
+- Added the existing `Incorrect match? Scan cover instead` action to
+  UPCitemdb results so ambiguous legacy UPC matches can pivot directly to the
+  book-cover workflow.
+- Prevented the rejected UPC from being treated as a scanned ISBN during the
+  cover lookup, allowing a cover-verified catalog ISBN to be imported without
+  a false identifier conflict.
+
+### Verification
+
+- The production build and all 65 automated tests pass on Ubuntu with Node.js
+  22.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.4.5] - 2026-08-30
 
 ### Fixed
@@ -235,11 +253,14 @@ All notable changes to HomeBox Importer are documented here.
 - Post-merge GitHub Actions successfully built and published the multi-platform
   `linux/amd64` and `linux/arm64` container image.
 
-[0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
+[0.4.6]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.6
+[0.4.5]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.5
+[0.4.4]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.4
 [0.4.3]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.3
 [0.4.2]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.2
 [0.4.1]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.1
 [0.4.0]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.4.0
+[0.3.13]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.13
 [0.3.12]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.12
 [0.3.11]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.11
 [0.3.10]: https://github.com/KoshiirRa/homebox-importer/releases/tag/v0.3.10

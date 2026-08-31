@@ -1,6 +1,6 @@
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { isBookCandidate } from "./candidate.js";
-import { canScanCoverInstead, coverOutcome, metadataSource } from "./cover-status.js";
+import { canScanCoverInstead, coverFallbackIdentifier, coverOutcome, metadataSource } from "./cover-status.js";
 
 const elements = {
   status: document.querySelector("#status"), location: document.querySelector("#location"),
@@ -17,6 +17,7 @@ let matches = [];
 let coverLookupAvailable = false;
 let manualProvenance = "manual_after_no_match";
 let identifierlessBook = false;
+let coverLookupIdentifier = "";
 
 function destinationFromQr(value) {
   try {
@@ -65,10 +66,11 @@ function renderLocations(locations) {
   }
 }
 
-function scanCoverInstead() {
+function scanCoverInstead(item) {
   identifierlessBook = false;
+  coverLookupIdentifier = coverFallbackIdentifier(item, elements.barcode.value);
   manualProvenance = "manual_after_rejected_candidate";
-  renderManualDraft(elements.barcode.value, true, null, manualProvenance);
+  renderManualDraft(coverLookupIdentifier, true, null, manualProvenance);
   elements.coverFallback.hidden = false;
   coverMessage("The barcode result was set aside. Choose or take a clear cover photo.");
   showRecognizedCoverText();
@@ -117,7 +119,7 @@ function renderMatches() {
       coverButton.type = "button";
       coverButton.className = "secondary";
       coverButton.textContent = "Incorrect match? Scan cover instead";
-      coverButton.addEventListener("click", scanCoverInstead);
+      coverButton.addEventListener("click", () => scanCoverInstead(item));
       actions.append(coverButton);
     }
     details.append(heading, byline, metadata, source, actions);
@@ -301,7 +303,7 @@ async function lookupCover(file) {
     const result = await jsonRequest("/api/books/cover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image, barcode: elements.barcode.value, identifierless: identifierlessBook })
+      body: JSON.stringify({ image, barcode: coverLookupIdentifier, identifierless: identifierlessBook })
     });
     const outcome = coverOutcome(result);
     coverMessage(outcome.message, outcome.kind);
@@ -334,6 +336,7 @@ async function lookupCover(file) {
 
 async function lookup() {
   identifierlessBook = false;
+  coverLookupIdentifier = elements.barcode.value;
   elements.coverFallback.hidden = true;
   message("Looking up barcode…");
   try {
@@ -378,6 +381,7 @@ async function importMatch(index) {
 function startIdentifierlessBook() {
   stopScanner();
   identifierlessBook = true;
+  coverLookupIdentifier = "";
   elements.barcode.value = "";
   renderManualDraft("", true, null, "manual_without_identifier");
   elements.coverFallback.hidden = !coverLookupAvailable;

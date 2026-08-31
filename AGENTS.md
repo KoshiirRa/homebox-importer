@@ -12,7 +12,7 @@ HomeBox remains the system of record. This application may enrich and submit dat
 - Local development runtime: Node.js 22
 - GitHub Actions runtime: Node.js 24 LTS
 - Published container runtime: Node.js 26
-- Current importer release: v0.4.3
+- Current importer release: v0.4.6
 - Deployment: Docker/Compose
 - Browser UI: installable responsive PWA
 - Supported workflows: ISBN and identifier-less books plus UPC/EAN music, movies, video games, and ordinary products
