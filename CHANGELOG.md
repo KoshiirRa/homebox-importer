@@ -4,6 +4,38 @@ All notable changes to HomeBox Importer are documented here.
 
 ## Unreleased
 
+## [0.5.0] - 2026-09-07
+
+### Added
+
+- Added dry-run and explicitly enabled write workflows for independently
+  inferring canonical `Game System` and `Game Edition` text fields on tabletop
+  RPG books from locations, media type, tags, titles, descriptions, ISBN
+  metadata, publishers, and existing custom fields.
+- Added separate high, medium, and low confidence classifications. Only
+  high-confidence values are written automatically; lower-confidence and
+  conflicting matches remain in the review report.
+- Added approved-report write mode so a reviewed dry-run snapshot can be
+  applied without expanding its scope when external ISBN results later change.
+
+### Changed
+
+- Full HomeBox entities are fetched immediately before update and merged into
+  complete v0.26.2 `EntityUpdate` payloads. Existing non-empty game fields,
+  tags, locations, relationships, metadata, and `Edition or Printing` values
+  remain authoritative and unchanged.
+- Updated the transitive `qs` dependency from 6.15.3 to 6.16.0 to resolve the
+  current denial-of-service advisories reported by npm audit.
+
+### Verification
+
+- The production build and all 78 automated tests pass on Ubuntu with Node.js
+  22.
+- Dry-run, exact approved-plan application, and zero-write idempotent reapply
+  were verified against HomeBox v0.26.2.
+- Both the full npm audit and the production-only audit report zero known
+  vulnerabilities.
+
 ## [0.4.6] - 2026-08-30
 
 ### Fixed
