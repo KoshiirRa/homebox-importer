@@ -182,3 +182,26 @@ test("queries active direct contents by parent when the entity response omits ch
   assert.equal(contents.items.length, 1);
   assert.equal(contents.items[0].quantity, 2);
 });
+
+test("uses the v0.26.2 custom-field, pagination, tree, and full-update workflow", async () => {
+  const calls = [];
+  const fakeFetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith("/api/v1/entities/fields")) return Response.json(["Media Type"]);
+    if (url.endsWith("/api/v1/entities/tree?withItems=true")) {
+      return Response.json([{ id: "games", name: "Games", children: [{ id: "book", name: "Core Book", children: [] }] }]);
+    }
+    if (url.includes("/api/v1/entities?page=1")) return Response.json({ total: 3, items: [{ id: "1" }, { id: "2" }] });
+    if (url.includes("/api/v1/entities?page=2")) return Response.json({ total: 3, items: [{ id: "3" }] });
+    if (url.endsWith("/api/v1/entities/book") && options.method === "PUT") return Response.json({ id: "book" });
+    return new Response("Not found", { status: 404 });
+  };
+  const client = new HomeboxClient({ baseUrl: "http://homebox:7745", apiKey: "secret", fetchImpl: fakeFetch });
+  assert.deepEqual(await client.customFieldNames(), ["Media Type"]);
+  assert.deepEqual((await client.allEntities({ pageSize: 2 })).map(item => item.id), ["1", "2", "3"]);
+  assert.equal((await client.entityPaths()).get("book"), "Games → Core Book");
+  await client.updateEntity("book", { id: "book", name: "Core Book", fields: [] });
+  const update = calls.find(call => call.options.method === "PUT");
+  assert.equal(update.url, "http://homebox:7745/api/v1/entities/book");
+  assert.deepEqual(JSON.parse(update.options.body), { id: "book", name: "Core Book", fields: [] });
+});

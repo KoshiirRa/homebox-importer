@@ -132,6 +132,32 @@ The example Compose service uses Docker's `json-file` driver with three 10 MB
 rotated files. These logs survive container restarts but are not durable
 application storage and are normally removed when the container is removed.
 
+## Tabletop RPG book enrichment
+
+The importer includes a batch command that identifies tabletop RPG books and proposes two text custom fields: `Game System` and `Game Edition`. It uses the current location path, media type, tags, title, description, publisher/ISBN metadata, and existing custom fields. `Edition or Printing` is never used as rules-edition evidence and is preserved unchanged.
+
+Dry run is the default and never sends an entity update:
+
+```sh
+npm run enrich:rpg
+```
+
+The JSON report separates high-confidence system and edition proposals, preserved manual values, medium/low review suggestions, ambiguous records, unmatched tabletop records, and errors. Only high-confidence proposals are eligible for automatic writes. System and edition confidence are evaluated independently.
+
+After reviewing a dry run, write mode must be invoked explicitly:
+
+```sh
+node scripts/enrich-rpg-books.mjs --write
+```
+
+For an approval-sensitive batch, lock write mode to the exact reviewed snapshot so later provider results cannot expand its scope:
+
+```sh
+node scripts/enrich-rpg-books.mjs --write --apply-report=reports/approved-dry-run.json
+```
+
+Write mode fetches the complete current entity immediately before each update, preserves every updateable field, custom field, tag, parent relationship, and metadata value, and leaves attachments on Homebox's separate attachment relationship. Existing non-empty `Game System` and `Game Edition` values are authoritative. Correct or manually populated records cause no PUT request, making repeated runs idempotent. Concurrency is bounded to four by default and can be set from 1 through 10 with `RPG_ENRICH_CONCURRENCY`.
+
 ## Test/reset boundary
 
 Use only conspicuously named junk records until the workflow is accepted. Before production use, delete and recreate the HomeBox volume, rotate `HBOX_AUTH_API_KEY_PEPPER`, create a new importer API key, pin the tested HomeBox image version, and configure off-site backups.

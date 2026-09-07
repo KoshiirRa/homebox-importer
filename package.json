@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "enrich:rpg": "node scripts/enrich-rpg-books.mjs --dry-run"
   },
   "dependencies": {
     "@zxing/browser": "^0.2.1",

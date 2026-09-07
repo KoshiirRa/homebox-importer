@@ -66,6 +66,42 @@ export class HomeboxClient {
     return this.request(`/v1/entities/${encodeURIComponent(id)}`);
   }
 
+  customFieldNames() {
+    return this.request("/v1/entities/fields");
+  }
+
+  async allEntities({ pageSize = 500 } = {}) {
+    const items = [];
+    for (let page = 1; ; page += 1) {
+      const result = await this.entities({ page, pageSize });
+      const pageItems = Array.isArray(result) ? result : result?.items ?? [];
+      items.push(...pageItems);
+      if (Array.isArray(result) || pageItems.length < pageSize || items.length >= Number(result?.total ?? Infinity)) break;
+    }
+    return items;
+  }
+
+  async entityPaths() {
+    const tree = await this.request("/v1/entities/tree?withItems=true");
+    const paths = new Map();
+    const walk = (nodes, ancestors = []) => {
+      for (const node of nodes ?? []) {
+        const path = [...ancestors, node.name];
+        paths.set(node.id, path.join(" → "));
+        walk(node.children, path);
+      }
+    };
+    walk(Array.isArray(tree) ? tree : []);
+    return paths;
+  }
+
+  updateEntity(id, payload) {
+    return this.request(`/v1/entities/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  }
+
   async boxContents(id) {
     const [box, result] = await Promise.all([
       this.entity(id),
